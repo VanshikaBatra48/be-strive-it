@@ -14,7 +14,7 @@ try {
     }
 
     const internData = {
-        name,
+        name, 
         email,
         role:'intern',
         mentorId,

@@ -55,6 +55,11 @@ app.use(express.json());
 app.use('/', internRoutes);
 app.use('/', mentorRoutes);
 
+
+// Authentication routes
+app.use('/api/auth', require('./routes/authRoutes'));
+
+
 // Test route
 app.get('/', (req, res) => {
     res.json({
