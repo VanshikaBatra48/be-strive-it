@@ -5,10 +5,10 @@ const router = express.Router();
 const internController = require('../controller/internController');
 
 // Create a new intern
-router.post('/', internController.createIntern);
+router.post('/createIntern', internController.createIntern);
 
 // Get all interns
-router.get('/', internController.getAllInterns);
+router.get('/getAllIntern', internController.getAllInterns);
 
 // Get an intern by ID
 router.get('/id/:id', internController.getInternById);

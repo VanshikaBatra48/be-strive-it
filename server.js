@@ -1,16 +1,88 @@
+// const express = require('express');
+// const { connectDB } = require('./config/database');
+
+// const internRoutes = require('./routes/internRoute');
+// const mentorRoutes = require('./routes/mentorRoutes');
+
+// const app = express();
+
+// app.use(express.json());
+
+// // Register routes
+// app.use('/', internRoutes);
+// app.use('/', mentorRoutes);
+
+// // Test route
+// app.get('/', (req, res) => {
+//     res.json({
+//         message: 'Intern Management System API is running!'
+//     });
+// });
+
+// const PORT = process.env.PORT || 3000;
+
+// async function startServer() {
+//     try {
+//         await connectDB();
+
+//         app.listen(PORT, () => {
+//             console.log(`Server running at http://localhost:${PORT}`);
+//         });
+//     } catch (error) {
+//         console.error('Unable to start server:', error.message);
+//         process.exit(1);
+//     }
+// }
+
+// startServer();
+
 const express = require('express');
+const { sequelize, connectDB } = require('./config/database');
+
+// Import model
+const Intern = require('./models/intern');
+const Mentor = require('./models/mentor');
+
+// Import routes
+const internRoutes = require('./routes/internRoute');
+const mentorRoutes = require('./routes/mentorRoutes');
+
 const app = express();
 
-const internRoutes = require('./routes/internRoute');
-
-// Middleware to read JSON request bodies
 app.use(express.json());
 
-// Register intern routes
-app.use('/api/interns', internRoutes);
+// Register routes
+app.use('/', internRoutes);
+app.use('/', mentorRoutes);
 
-const PORT = 3000;
-
-app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+// Test route
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Intern Management System API is running!'
+    });
 });
+
+const PORT = process.env.PORT || 3000;
+
+async function startServer() {
+    try {
+        // Step 1: Connect to PostgreSQL
+        await connectDB();
+
+        // Step 2: Create tables for imported models if they don't exist
+        await sequelize.sync();
+
+        console.log('Database tables are ready!');
+
+        // Step 3: Start the server
+        app.listen(PORT, () => {
+            console.log(`Server running at http://localhost:${PORT}`);
+        });
+
+    } catch (error) {
+        console.error('Unable to start server:', error);
+        process.exit(1);
+    }
+}
+
+startServer();
