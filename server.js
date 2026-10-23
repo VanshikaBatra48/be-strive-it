@@ -1,41 +1,3 @@
-// const express = require('express');
-// const { connectDB } = require('./config/database');
-
-// const internRoutes = require('./routes/internRoute');
-// const mentorRoutes = require('./routes/mentorRoutes');
-
-// const app = express();
-
-// app.use(express.json());
-
-// // Register routes
-// app.use('/', internRoutes);
-// app.use('/', mentorRoutes);
-
-// // Test route
-// app.get('/', (req, res) => {
-//     res.json({
-//         message: 'Intern Management System API is running!'
-//     });
-// });
-
-// const PORT = process.env.PORT || 3000;
-
-// async function startServer() {
-//     try {
-//         await connectDB();
-
-//         app.listen(PORT, () => {
-//             console.log(`Server running at http://localhost:${PORT}`);
-//         });
-//     } catch (error) {
-//         console.error('Unable to start server:', error.message);
-//         process.exit(1);
-//     }
-// }
-
-// startServer();
-
 const express = require('express');
 const { sequelize, connectDB } = require('./config/database');
 
@@ -46,6 +8,7 @@ const Mentor = require('./models/mentor');
 // Import routes
 const internRoutes = require('./routes/internRoute');
 const mentorRoutes = require('./routes/mentorRoutes');
+const userRoutes = require('./routes/userRoute');
 
 const app = express();
 
@@ -54,6 +17,7 @@ app.use(express.json());
 // Register routes
 app.use('/', internRoutes);
 app.use('/', mentorRoutes);
+app.use('/api', userRoutes);
 
 // Test route
 app.get('/', (req, res) => {
