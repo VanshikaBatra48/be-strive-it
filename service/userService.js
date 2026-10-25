@@ -1,197 +1,25 @@
-// const bcrypt = require('bcrypt');
-// const User = require('../models/user');
-
-// const userService = {
-
-//     // Create a new user
-//     async createUser(userData) {
-//         const { name, email, password, role } = userData;
-
-//         // Check whether the email already exists
-//         const existingUser = await User.findOne({
-//             where: { email }
-//         });
-
-//         if (existingUser) {
-//             throw new Error('A user with this email already exists');
-//         }
-
-//         // Hash the password before saving
-//         const hashedPassword = await bcrypt.hash(password, 10);
-
-//         const user = await User.create({
-//             name,
-//             email,
-//             password: hashedPassword,
-//             role: role || 'admin',
-//             firstLogin: true
-//         });
-
-//         // Never return the password
-//         const { password: _, ...userWithoutPassword } = user.toJSON();
-
-//         return userWithoutPassword;
-//     },
-
-//     // Get all users
-//     async getAllUsers() {
-//         return await User.findAll({
-//             attributes: { exclude: ['password'] },
-//             order: [['id', 'ASC']]
-//         });
-//     },
-
-//     // Get a user by ID
-//     async getUserById(id) {
-//         const user = await User.findByPk(id, {
-//             attributes: { exclude: ['password'] }
-//         });
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         return user;
-//     },
-
-//     // Get a user by email
-//     async getUserByEmail(email) {
-//         const user = await User.findOne({
-//             where: { email },
-//             attributes: { exclude: ['password'] }
-//         });
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         return user;
-//     },
-
-//     // Update user details
-//     async updateUser(id, updateData) {
-//         const user = await User.findByPk(id);
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         const { name, email, status } = updateData;
-
-//         if (email && email !== user.email) {
-//             const existingUser = await User.findOne({
-//                 where: { email }
-//             });
-
-//             if (existingUser) {
-//                 throw new Error('A user with this email already exists');
-//             }
-//         }
-
-//         await user.update({
-//             ...(name !== undefined && { name }),
-//             ...(email !== undefined && { email }),
-//             ...(status !== undefined && { status })
-//         });
-
-//         const { password: _, ...userWithoutPassword } = user.toJSON();
-
-//         return userWithoutPassword;
-//     },
-
-//     // Change a user's password
-//     async changePassword(id, newPassword) {
-//         const user = await User.findByPk(id);
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         user.password = await bcrypt.hash(newPassword, 10);
-//         await user.save();
-
-//         return { message: 'Password updated successfully' };
-//     },
-
-//     // Delete a user
-//     async deleteUser(id) {
-//         const user = await User.findByPk(id);
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         await user.destroy();
-
-//         return { message: 'User deleted successfully' };
-//     },
-
-//     // Mark first login as completed
-//     async completeFirstLogin(id) {
-//         const user = await User.findByPk(id);
-
-//         if (!user) {
-//             throw new Error('User not found');
-//         }
-
-//         if (user.firstLogin) {
-//             user.firstLogin = false;
-//             await user.save();
-//         }
-
-//         return { message: 'First login completed successfully' };
-//     }
-// };
-
-//     //get mentor by status
-//     async function getUserByStatus(status) {
-//         return await User.findAll({
-//             where: {
-//                 status
-//             }
-//         });
-//     }
-
-   
-//     //getting user by active or inactive filter
-// async function getInternByStatus(status){
-//     const intern = await User.findAll({
-//         where:{
-//             status: status
-        
-//         },
-//         include: [
-//             {
-//                 model: User,
-//                 as: 'user',
-//                 attributes: ['id', 'name', 'email']
-//             }
-//         ]
-//     });
-
-//     if(intern.length  === 0){
-//         throw new Error(`${status} intern not found`);
-//     }
-//     return intern;
-// }
-
-// module.exports = userService;
-
-const bcrypt = require('bcrypt');
-const User = require('../models/user');
+const bcrypt = require("bcrypt");
+const { Op } = require("sequelize");
+const User = require("../models/user");
+const { generateToken } = require("../middleware/authMiddleware");
 
 const userService = {
-
     // Create a new user
     async createUser(userData) {
-        const { name, email, password, role } = userData;
+        const {
+            name,
+            email,
+            password,
+            role,
+            assigned_to
+        } = userData;
 
         const existingUser = await User.findOne({
             where: { email }
         });
 
         if (existingUser) {
-            throw new Error('A user with this email already exists');
+            throw new Error("A user with this email already exists");
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -200,7 +28,8 @@ const userService = {
             name,
             email,
             password: hashedPassword,
-            role: role || 'admin',
+            role: role || "admin",
+            assigned_to: assigned_to || "admin",
             firstLogin: true
         });
 
@@ -209,39 +38,73 @@ const userService = {
         return userWithoutPassword;
     },
 
-    // Get all users
-    async getAllUsers() {
-        return await User.findAll({
-            attributes: { exclude: ['password'] },
-            order: [['id', 'ASC']]
-        });
-    },
+    // Filter users by ID, email, role, status, name, or assigned_to
+    // No query parameters means all users
+    async filterUsers(filters = {}) {
+        const { id, email, role, status, name, assigned_to } = filters;
 
-    // Get a user by ID
-    async getUserById(id) {
-        const user = await User.findByPk(id, {
-            attributes: { exclude: ['password'] }
-        });
+        const where = {};
 
-        if (!user) {
-            throw new Error('User not found');
+        // Filter by user ID
+        if (id !== undefined && id !== "") {
+            where.id = id;
         }
 
-        return user;
-    },
-
-    // Get a user by email
-    async getUserByEmail(email) {
-        const user = await User.findOne({
-            where: { email },
-            attributes: { exclude: ['password'] }
-        });
-
-        if (!user) {
-            throw new Error('User not found');
+        // Filter by email (case-insensitive)
+        if (email) {
+            where.email = {
+                [Op.iLike]: email.trim()
+            };
         }
 
-        return user;
+        // Filter by role (normalize lowercase and map 'intern' -> 'mentee')
+        if (role) {
+            let normalizedRole = role.trim().toLowerCase();
+            if (normalizedRole === "intern") normalizedRole = "mentee";
+
+            const allowedRoles = ["admin", "mentee", "mentor"];
+            if (!allowedRoles.includes(normalizedRole)) {
+                return []; // Return empty array safely without causing a Postgres enum error
+            }
+            where.role = normalizedRole;
+        }
+
+        // Filter by status (normalize lowercase e.g. "Active" -> "active")
+        if (status) {
+            const normalizedStatus = status.trim().toLowerCase();
+            const allowedStatuses = ["active", "inactive"];
+            if (!allowedStatuses.includes(normalizedStatus)) {
+                return []; // Return empty array safely without causing a Postgres enum error
+            }
+            where.status = normalizedStatus;
+        }
+
+        // Filter by assigned_to (case-insensitive)
+        if (assigned_to) {
+            where.assigned_to = {
+                [Op.iLike]: assigned_to.trim()
+            };
+        }
+
+        // Filter by partial, case-insensitive name
+        if (name) {
+            // Escape special regex-like characters used by SQL LIKE
+            const escapedName = name.trim().replace(/[\\%_]/g, "\\$&");
+
+            where.name = {
+                [Op.iLike]: `%${escapedName}%`
+            };
+        }
+
+        const users = await User.findAll({
+            where,
+            attributes: {
+                exclude: ["password"]
+            },
+            order: [["id", "ASC"]]
+        });
+
+        return users;
     },
 
     // Update user details
@@ -249,25 +112,36 @@ const userService = {
         const user = await User.findByPk(id);
 
         if (!user) {
-            throw new Error('User not found');
+            throw new Error("User not found");
         }
 
-        const { name, email, status } = updateData;
+        const {
+            name,
+            email,
+            status,
+            role,
+            assigned_to
+        } = updateData;
 
         if (email && email !== user.email) {
             const existingUser = await User.findOne({
-                where: { email }
+                where: {
+                    email,
+                    id: { [Op.ne]: id }
+                }
             });
 
             if (existingUser) {
-                throw new Error('A user with this email already exists');
+                throw new Error("A user with this email already exists");
             }
         }
 
         await user.update({
             ...(name !== undefined && { name }),
             ...(email !== undefined && { email }),
-            ...(status !== undefined && { status })
+            ...(status !== undefined && { status }),
+            ...(role !== undefined && { role }),
+            ...(assigned_to !== undefined && { assigned_to })
         });
 
         const { password: _, ...userWithoutPassword } = user.toJSON();
@@ -275,18 +149,68 @@ const userService = {
         return userWithoutPassword;
     },
 
+    // User login & JWT signing
+    async login(email, password) {
+        if (!email || !password) {
+            throw new Error("Email and password are required");
+        }
+
+        const user = await User.findOne({
+            where: { email: email.trim().toLowerCase() }
+        });
+
+        if (!user) {
+            throw new Error("Invalid email or password");
+        }
+
+        if (user.status === "inactive") {
+            throw new Error("Account is inactive. Please contact administrator.");
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            throw new Error("Invalid email or password");
+        }
+
+        const token = generateToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            firstLogin: user.firstLogin
+        });
+
+        const { password: _, ...userWithoutPassword } = user.toJSON();
+
+        return {
+            message: "Login successful",
+            token,
+            user: userWithoutPassword,
+            redirectTo: user.firstLogin ? "/forget-password" : "/dashboard"
+        };
+    },
+
     // Change a user's password
     async changePassword(id, newPassword) {
         const user = await User.findByPk(id);
 
         if (!user) {
-            throw new Error('User not found');
+            throw new Error("User not found");
+        }
+
+        // Validate that new password is not the same as the old password
+        const isSamePassword = await bcrypt.compare(newPassword, user.password);
+        if (isSamePassword) {
+            throw new Error("New password cannot be the same as the old password");
         }
 
         user.password = await bcrypt.hash(newPassword, 10);
+        user.firstLogin = false; // Successfully changed password sets firstLogin to false
         await user.save();
 
-        return { message: 'Password updated successfully' };
+        return {
+            message: "Password updated successfully",
+            firstLogin: user.firstLogin
+        };
     },
 
     // Delete a user
@@ -294,12 +218,14 @@ const userService = {
         const user = await User.findByPk(id);
 
         if (!user) {
-            throw new Error('User not found');
+            throw new Error("User not found");
         }
 
         await user.destroy();
 
-        return { message: 'User deleted successfully' };
+        return {
+            message: "User deleted successfully"
+        };
     },
 
     // Mark first login as completed
@@ -307,7 +233,7 @@ const userService = {
         const user = await User.findByPk(id);
 
         if (!user) {
-            throw new Error('User not found');
+            throw new Error("User not found");
         }
 
         if (user.firstLogin) {
@@ -315,59 +241,15 @@ const userService = {
             await user.save();
         }
 
-        return { message: 'First login completed successfully' };
-    },
-
-    // Get users by role
-    async getUsersByRole(role) {
-        const allowedRoles = ['admin', 'mentor', 'intern'];
-
-        if (!allowedRoles.includes(role)) {
-            throw new Error('Invalid role');
-        }
-
-        return await User.findAll({
-            where: { role },
-            attributes: { exclude: ['password'] },
-            order: [['id', 'ASC']]
-        });
-    },
-
-    // Get users by status
-    async getUsersByStatus(status) {
-        const allowedStatuses = ['active', 'inactive'];
-
-        if (!allowedStatuses.includes(status)) {
-            throw new Error('Invalid status');
-        }
-
-        return await User.findAll({
-            where: { status },
-            attributes: { exclude: ['password'] },
-            order: [['id', 'ASC']]
-        });
-    },
-
-
-async getUsersByRole(role) {
-    const allowedRoles = ['admin', 'intern', 'mentor'];
-
-    if (!allowedRoles.includes(role)) {
-        throw new Error('Invalid role. Use admin, intern, or mentor');
+        return {
+            message: "First login completed successfully"
+        };
     }
-
-    const users = await User.findAll({
-        where: {
-            role: role
-        },
-        attributes: {
-            exclude: ['password']
-        },
-        order: [['id', 'ASC']]
-    });
-
-    return users;
-},
 };
 
 module.exports = userService;
+
+
+
+
+

@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { assign } = require('nodemailer/lib/shared');
 
 const User = sequelize.define(
     'User',
@@ -22,6 +23,13 @@ const User = sequelize.define(
             validate: {
                 isEmail: true
             }
+        },
+        
+        assigned_to:{
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: 'admin'
+
         },
 
         password: {

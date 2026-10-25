@@ -32,7 +32,7 @@ const userController = {
     // Get all users
     async getAllUsers(req, res) {
         try {
-            const users = await userService.getAllUsers();
+            const users = await userService.filterUsers(req.query);
 
             return res.status(200).json({
                 success: true,
@@ -48,60 +48,9 @@ const userController = {
             });
         }
     },
-
-    // Get user by ID
-    async getUserById(req, res) {
-        try {
-            const user = await userService.getUserById(req.params.id);
-
-            return res.status(200).json({
-                success: true,
-                data: user
-            });
-        } catch (error) {
-            console.error('Error fetching user:', error);
-
-            if (error.message === 'User not found') {
-                return res.status(404).json({
-                    success: false,
-                    message: error.message
-                });
-            }
-
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to fetch user'
-            });
-        }
-    },
-
-    // Get user by email
-    async getUserByEmail(req, res) {
-        try {
-            const user = await userService.getUserByEmail(req.params.email);
-
-            return res.status(200).json({
-                success: true,
-                data: user
-            });
-        } catch (error) {
-            console.error('Error fetching user by email:', error);
-
-            if (error.message === 'User not found') {
-                return res.status(404).json({
-                    success: false,
-                    message: error.message
-                });
-            }
-
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to fetch user'
-            });
-        }
-    },
-
+    
     // Update user details
+    
     async updateUser(req, res) {
         try {
             const user = await userService.updateUser(
@@ -138,45 +87,8 @@ const userController = {
         }
     },
 
-    // Change user password
-    async changePassword(req, res) {
-        try {
-            const { newPassword } = req.body;
-
-            if (!newPassword) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'New password is required'
-                });
-            }
-
-            const result = await userService.changePassword(
-                req.params.id,
-                newPassword
-            );
-
-            return res.status(200).json({
-                success: true,
-                message: result.message
-            });
-        } catch (error) {
-            console.error('Error changing password:', error);
-
-            if (error.message === 'User not found') {
-                return res.status(404).json({
-                    success: false,
-                    message: error.message
-                });
-            }
-
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to change password'
-            });
-        }
-    },
-
     // Delete user
+
     async deleteUser(req, res) {
         try {
             const result = await userService.deleteUser(req.params.id);
@@ -203,6 +115,7 @@ const userController = {
     },
 
     // Complete first login
+
     async completeFirstLogin(req, res) {
         try {
             const result = await userService.completeFirstLogin(
@@ -230,23 +143,34 @@ const userController = {
         }
     },
 
-    // Get users by role
-    async getUsersByRole(req, res) {
+    // User login & JWT generation
+    async login(req, res) {
         try {
-            const users = await userService.getUsersByRole(
-                req.params.role
-            );
+            const { email, password } = req.body;
+            const result = await userService.login(email, password);
 
             return res.status(200).json({
                 success: true,
-                count: users.length,
-                data: users
+                message: result.message,
+                token: result.token,
+                user: result.user,
+                redirectTo: result.redirectTo
             });
         } catch (error) {
-            console.error('Error fetching users by role:', error);
+            console.error('Error logging in:', error);
 
-            if (error.message.includes('Invalid role')) {
-                return res.status(400).json({
+            if (
+                error.message === 'Invalid email or password' ||
+                error.message === 'Email and password are required'
+            ) {
+                return res.status(401).json({
+                    success: false,
+                    message: error.message
+                });
+            }
+
+            if (error.message.includes('inactive')) {
+                return res.status(403).json({
                     success: false,
                     message: error.message
                 });
@@ -254,27 +178,52 @@ const userController = {
 
             return res.status(500).json({
                 success: false,
-                message: 'Failed to fetch users by role'
+                message: 'Failed to log in'
             });
         }
     },
 
-    // Get users by status
-    async getUsersByStatus(req, res) {
+    // Change user password
+    async changePassword(req, res) {
         try {
-            const users = await userService.getUsersByStatus(
-                req.params.status
+            const { newPassword } = req.body;
+            const userId = req.params.id || req.user?.id;
+
+            if (!userId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User ID is required'
+                });
+            }
+
+            if (!newPassword) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'New password is required'
+                });
+            }
+
+            const result = await userService.changePassword(
+                userId,
+                newPassword
             );
 
             return res.status(200).json({
                 success: true,
-                count: users.length,
-                data: users
+                message: result.message,
+                firstLogin: result.firstLogin
             });
         } catch (error) {
-            console.error('Error fetching users by status:', error);
+            console.error('Error changing password:', error);
 
-            if (error.message.includes('Invalid status')) {
+            if (error.message === 'User not found') {
+                return res.status(404).json({
+                    success: false,
+                    message: error.message
+                });
+            }
+
+            if (error.message === 'New password cannot be the same as the old password') {
                 return res.status(400).json({
                     success: false,
                     message: error.message
@@ -283,10 +232,122 @@ const userController = {
 
             return res.status(500).json({
                 success: false,
-                message: 'Failed to fetch users by status'
+                message: error.message || 'Failed to change password'
             });
         }
-    }
+    },
 };
 
 module.exports = userController;
+
+
+
+// // Get users by role
+    // async getUsersByRole(req, res) {
+    //     try {
+    //         const users = await userService.getUsersByRole(
+    //             req.params.role
+    //         );
+
+    //         return res.status(200).json({
+    //             success: true,
+    //             count: users.length,
+    //             data: users
+    //         });
+    //     } catch (error) {
+    //         console.error('Error fetching users by role:', error);
+
+    //         if (error.message.includes('Invalid role')) {
+    //             return res.status(400).json({
+    //                 success: false,
+    //                 message: error.message
+    //             });
+    //         }
+
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: 'Failed to fetch users by role'
+    //         });
+    //     }
+    // },
+
+    // // Get users by status
+    // async getUsersByStatus(req, res) {
+    //     try {
+    //         const users = await userService.getUsersByStatus(
+    //             req.params.status
+    //         );
+
+    //         return res.status(200).json({
+    //             success: true,
+    //             count: users.length,
+    //             data: users
+    //         });
+    //     } catch (error) {
+    //         console.error('Error fetching users by status:', error);
+
+    //         if (error.message.includes('Invalid status')) {
+    //             return res.status(400).json({
+    //                 success: false,
+    //                 message: error.message
+    //             });
+    //         }
+
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: 'Failed to fetch users by status'
+    //         });
+    //     }
+    // }
+
+    // // Get user by ID
+    // async getUserById(req, res) {
+    //     try {
+    //         const user = await userService.getUserById(req.params.id);
+
+    //         return res.status(200).json({
+    //             success: true,
+    //             data: user
+    //         });
+    //     } catch (error) {
+    //         console.error('Error fetching user:', error);
+
+    //         if (error.message === 'User not found') {
+    //             return res.status(404).json({
+    //                 success: false,
+    //                 message: error.message
+    //             });
+    //         }
+
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: 'Failed to fetch user'
+    //         });
+    //     }
+    // },
+
+    // // Get user by email
+    // async getUserByEmail(req, res) {
+    //     try {
+    //         const user = await userService.getUserByEmail(req.params.email);
+
+    //         return res.status(200).json({
+    //             success: true,
+    //             data: user
+    //         });
+    //     } catch (error) {
+    //         console.error('Error fetching user by email:', error);
+
+    //         if (error.message === 'User not found') {
+    //             return res.status(404).json({
+    //                 success: false,
+    //                 message: error.message
+    //             });
+    //         }
+
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: 'Failed to fetch user'
+    //         });
+    //     }
+    // },
