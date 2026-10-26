@@ -1,34 +1,108 @@
 const userService = require('../service/userService');
+const { sendLoginCredentials } = require('../service/emailService');
 
 const userController = {
 
-    // Create a new user
-    async createUser(req, res) {
-        try {
-            const user = await userService.createUser(req.body);
+async createUser(req, res) {
+    let createdUser;
 
-            return res.status(201).json({
-                success: true,
-                message: 'User created successfully',
-                data: user
-            });
-        } catch (error) {
-            console.error('Error creating user:', error);
+    try {
+        // Create the user and generate a temporary password
+        const result = await userService.createUser(req.body);
 
-            if (error.message === 'A user with this email already exists') {
-                return res.status(409).json({
-                    success: false,
-                    message: error.message
-                });
-            }
+        const { user, temporaryPassword } = result;
+        createdUser = user;
 
-            return res.status(500).json({
+        // Send login credentials to the user's email
+        await sendLoginCredentials(user, temporaryPassword);
+
+        // Return success only after the email service succeeds
+        return res.status(201).json({
+            success: true,
+            message: 'User created and login credentials emailed successfully.',
+            data: user
+        });
+
+    } catch (error) {
+        console.error('Error creating user or sending email:', error);
+
+        if (error.message === 'A user with this email already exists') {
+            return res.status(409).json({
                 success: false,
-                message: 'Failed to create user'
+                message: error.message
             });
         }
-    },
 
+        if (error.message === 'Name, email, and role are required') {
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        // The user may already exist in the database.
+        if (createdUser) {
+            return res.status(502).json({
+                success: false,
+                message: 'User created, but the login email could not be sent.',
+                userCreated: true,
+                userId: createdUser.id
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to create user.'
+        });
+    }
+},
+
+
+// // Create a new user and send login credentials
+// async createUser(req, res) {
+//     try {
+//         const user = await userService.createUser(req.body);
+
+//         return res.status(201).json({
+//             success: true,
+//             message: 'User created successfully. Login credentials have been sent to the registered email.',
+//             data: user
+//         });
+
+//     } catch (error) {
+//         console.error('Error creating user:', error.message);
+
+//         if (error.message === 'A user with this email already exists') {
+//             return res.status(409).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
+
+//         if (error.message === 'User created, but the login email could not be sent') {
+//             return res.status(502).json({
+//                 success: false,
+//                 message: error.message,
+//                 userCreated: true
+//             });
+//         }
+
+//         if (
+//             error.message === 'Name, email, and role are required' ||
+//             error.message === 'Invalid role'
+//         ) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
+
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to create user'
+//         });
+//     }
+// },
     // Get all users
     async getAllUsers(req, res) {
         try {

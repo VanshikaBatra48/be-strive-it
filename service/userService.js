@@ -178,38 +178,96 @@
 // module.exports = userService;
 
 const bcrypt = require('bcrypt');
+const crypto = require('node:crypto');
 const User = require('../models/user');
 
 const userService = {
 
-    // Create a new user
-    async createUser(userData) {
-        const { name, email, password, role } = userData;
+    // // Create a new user
+    // async createUser(userData) {
+    //     const { name, email, password, role } = userData;
 
-        const existingUser = await User.findOne({
-            where: { email }
-        });
+    //     const existingUser = await User.findOne({
+    //         where: { email }
+    //     });
 
-        if (existingUser) {
-            throw new Error('A user with this email already exists');
-        }
+    //     if (existingUser) {
+    //         throw new Error('A user with this email already exists');
+    //     }
+    //      // Generate a random temporary password.
+    // const temporaryPassword =
+    //     crypto.randomBytes(12).toString('base64url');
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+    // // Hash the password before saving it.
+    // const hashedPassword = await bcrypt.hash(
+    //     temporaryPassword,
+    //     12
+    // );
 
-        const user = await User.create({
-            name,
-            email,
-            password: hashedPassword,
-            role: role || 'admin',
-            firstLogin: true
-        });
+    //     //const hashedPassword = await bcrypt.hash(password, 10);
 
-        const { password: _, ...userWithoutPassword } = user.toJSON();
+    //     const user = await User.create({
+    //         name,
+    //         email,
+    //         password: hashedPassword,
+    //         role: role || 'admin',
+    //         firstLogin: true
+    //     });
 
-        return userWithoutPassword;
-    },
+    //     const { password: _, ...userWithoutPassword } = user.toJSON();
 
-    // Get all users
+    //     return userWithoutPassword;
+    // },
+
+async createUser(userData) {
+    const { name, email, role } = userData;
+
+    // Validate required fields
+    if (!name || !email || !role) {
+        throw new Error('Name, email, and role are required');
+    }
+
+    // Check whether the email already exists
+    const existingUser = await User.findOne({
+        where: { email }
+    });
+
+    if (existingUser) {
+        throw new Error('A user with this email already exists');
+    }
+
+    // Generate a temporary password
+    const temporaryPassword =
+        crypto.randomBytes(12).toString('base64url');
+
+    // Hash the temporary password
+    const hashedPassword = await bcrypt.hash(
+        temporaryPassword,
+        12
+    );
+
+    // Save the user in PostgreSQL
+    const user = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+        role,
+        firstLogin: true
+    });
+
+    // Remove the password hash from the returned user object
+    const userWithoutPassword = user.toJSON();
+    delete userWithoutPassword.password;
+
+    // Return the user and temporary password separately
+    return {
+        user: userWithoutPassword,
+        temporaryPassword
+    };
+},
+
+
+    // // Get all users
     async getAllUsers() {
         return await User.findAll({
             attributes: { exclude: ['password'] },

@@ -33,4 +33,25 @@ router.patch('/users/:id', userController.updateUser);
 // Delete user
 router.delete('/users/:id', userController.deleteUser);
 
+const {
+    createUserController
+} = require('../controller/userController');
+
+const {
+    login
+} = require('../controller/authController');
+
+const {
+    changePassword
+} = require('../controller/passwordController');
+
+// // Create a mentor or mentee
+// router.post('/users', createUserController);
+
+// Login
+router.post('/login', login);
+
+// Change initial password
+router.post('/change-password', changePassword);
+
 module.exports = router;
