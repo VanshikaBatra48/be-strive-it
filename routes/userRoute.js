@@ -9,16 +9,19 @@ const { checkFirstLogin } = require('../middleware/firstLoginCheckMiddleware');
 router.post('/users/login', userController.login);
 
 // Create a user
-router.post('/users',  userController.createUser);
+router.post('/users', verifyToken, checkFirstLogin, userController.createUser);
 
 // Get all users and filtration 
-router.get('/users',verifyToken, checkFirstLogin, userController.getAllUsers);
+router.get('/users', verifyToken, checkFirstLogin, userController.getAllUsers);
 
-// Update user
-router.patch('/users/update/:id',verifyToken, checkFirstLogin, userController.updateUser);
+// Update user (supports both /users/update/:id and /users/:id)
+router.patch('/users/update/:id', verifyToken, checkFirstLogin, userController.updateUser);
+router.patch('/users/:id', verifyToken, checkFirstLogin, userController.updateUser);
+router.put('/users/:id', verifyToken, checkFirstLogin, userController.updateUser);
 
-// Delete user
-router.delete('/users/delete/:id', verifyToken, checkFirstLogin,userController.deleteUser);
+// Delete user (supports both /users/delete/:id and /users/:id)
+router.delete('/users/delete/:id', verifyToken, checkFirstLogin, userController.deleteUser);
+router.delete('/users/:id', verifyToken, checkFirstLogin, userController.deleteUser);
 
 // Complete first login
 router.patch('/users/:id/complete-first-login', userController.completeFirstLogin);
@@ -34,7 +37,7 @@ router.get('/users/me', verifyToken, checkFirstLogin, (req, res) => {
         success: true,
         user: req.user
     });
-}); 
+});
 
 module.exports = router;
 

@@ -1,23 +1,33 @@
 const express = require('express');
+const cors = require('cors');
 const { sequelize, connectDB } = require('./config/database');
 
-// Import model
-// const Intern = require('./models/intern');
-// const Mentor = require('./models/mentor');
+// Import models
+require('./models/user');
+require('./models/task');
 
 // Import routes
-// const internRoutes = require('./routes/internRoute');
-// const mentorRoutes = require('./routes/mentorRoutes');
 const userRoutes = require('./routes/userRoute');
+const taskRoutes = require('./routes/taskRoute');
 
 const app = express();
+
+app.use(cors({
+    origin: [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://192.168.1.5:5173"
+    ], credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+}));
 
 app.use(express.json());
 
 // Register routes
-// app.use('/', internRoutes);
-// app.use('/', mentorRoutes);
 app.use('/api', userRoutes);
+app.use('/api', taskRoutes);
 
 // Test route
 app.get('/', (req, res) => {
@@ -39,7 +49,7 @@ async function startServer() {
         console.log('Database tables are ready!');
 
         // Step 3: Start the server
-        app.listen(PORT, () => {
+        app.listen(PORT, "0.0.0.0", () => {
             console.log(`Server running at http://localhost:${PORT}`);
         });
 

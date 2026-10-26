@@ -11,7 +11,8 @@ const userService = {
             email,
             password,
             role,
-            assigned_to
+            assigned_to,
+            assignedMentees
         } = userData;
 
         const existingUser = await User.findOne({
@@ -24,18 +25,47 @@ const userService = {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        let normalizedRole = (role || "admin").trim().toLowerCase();
+        if (normalizedRole === "intern") normalizedRole = "mentee";
+
         const user = await User.create({
-            name,
-            email,
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
             password: hashedPassword,
-            role: role || "admin",
+            raw_password: password.trim(),
+            role: normalizedRole,
             assigned_to: assigned_to || "admin",
             firstLogin: true
         });
 
+        // If creating a mentor with assigned mentees, update those mentees in database
+        if (normalizedRole === "mentor" && Array.isArray(assignedMentees) && assignedMentees.length > 0) {
+            const menteeIds = assignedMentees.map(Number).filter(id => !isNaN(id) && id > 0);
+            const menteeNames = assignedMentees.filter(item => typeof item === 'string' && isNaN(Number(item)) && item.trim().length > 0);
+            const conditions = [];
+            if (menteeIds.length > 0) conditions.push({ id: { [Op.in]: menteeIds } });
+            if (menteeNames.length > 0) conditions.push({ name: { [Op.in]: menteeNames } });
+            if (conditions.length > 0) {
+                await User.update(
+                    { assigned_to: user.name },
+                    {
+                        where: {
+                            [Op.and]: [
+                                { [Op.or]: conditions },
+                                { role: "mentee" }
+                            ]
+                        }
+                    }
+                );
+            }
+        }
+
         const { password: _, ...userWithoutPassword } = user.toJSON();
 
-        return userWithoutPassword;
+        return {
+            ...userWithoutPassword,
+            password: password.trim()
+        };
     },
 
     // Filter users by ID, email, role, status, name, or assigned_to
@@ -104,7 +134,28 @@ const userService = {
             order: [["id", "ASC"]]
         });
 
-        return users;
+        // Ensure that any mentee whose assigned mentor does not exist in the database has assigned_to set to null
+        const activeMentors = await User.findAll({
+            where: { role: "mentor" },
+            attributes: ["name"]
+        });
+        const activeMentorNames = new Set(activeMentors.map((m) => m.name.toLowerCase().trim()));
+
+        return users.map((u) => {
+            const userObj = u.toJSON ? u.toJSON() : { ...u };
+            if (userObj.role === "mentee") {
+                if (
+                    !userObj.assigned_to ||
+                    userObj.assigned_to.toLowerCase() === "admin" ||
+                    userObj.assigned_to.toLowerCase() === "unassigned" ||
+                    !activeMentorNames.has(userObj.assigned_to.toLowerCase().trim())
+                ) {
+                    userObj.assigned_to = null;
+                }
+            }
+            userObj.password = userObj.raw_password || (userObj.role === "admin" ? "Admin@123" : userObj.role === "mentor" ? "Mentor@123" : "Mentee@123");
+            return userObj;
+        });
     },
 
     // Update user details
@@ -120,7 +171,8 @@ const userService = {
             email,
             status,
             role,
-            assigned_to
+            assigned_to,
+            password
         } = updateData;
 
         if (email && email !== user.email) {
@@ -136,17 +188,45 @@ const userService = {
             }
         }
 
+        let normalizedRole = role !== undefined ? role.trim().toLowerCase() : undefined;
+        if (normalizedRole === "intern") normalizedRole = "mentee";
+        let normalizedStatus = status !== undefined ? status.trim().toLowerCase() : undefined;
+
+        // If a mentor is renamed, update assigned_to for all their mentees
+        if (user.role === "mentor" && name && name.trim() !== user.name) {
+            await User.update(
+                { assigned_to: name.trim() },
+                {
+                    where: {
+                        assigned_to: {
+                            [Op.iLike]: user.name.trim()
+                        }
+                    }
+                }
+            );
+        }
+
+        const passwordUpdates = {};
+        if (password && typeof password === "string" && password.trim().length >= 6) {
+            passwordUpdates.password = await bcrypt.hash(password.trim(), 10);
+            passwordUpdates.raw_password = password.trim();
+        }
+
         await user.update({
-            ...(name !== undefined && { name }),
-            ...(email !== undefined && { email }),
-            ...(status !== undefined && { status }),
-            ...(role !== undefined && { role }),
-            ...(assigned_to !== undefined && { assigned_to })
+            ...(name !== undefined && { name: name.trim() }),
+            ...(email !== undefined && { email: email.trim().toLowerCase() }),
+            ...(normalizedStatus !== undefined && { status: normalizedStatus }),
+            ...(normalizedRole !== undefined && { role: normalizedRole }),
+            ...(assigned_to !== undefined && { assigned_to: assigned_to ? assigned_to.trim() : null }),
+            ...passwordUpdates
         });
 
         const { password: _, ...userWithoutPassword } = user.toJSON();
 
-        return userWithoutPassword;
+        return {
+            ...userWithoutPassword,
+            password: user.raw_password || ""
+        };
     },
 
     // User login & JWT signing
@@ -204,6 +284,7 @@ const userService = {
         }
 
         user.password = await bcrypt.hash(newPassword, 10);
+        user.raw_password = newPassword.trim();
         user.firstLogin = false; // Successfully changed password sets firstLogin to false
         await user.save();
 
@@ -219,6 +300,23 @@ const userService = {
 
         if (!user) {
             throw new Error("User not found");
+        }
+
+        const deletedName = user.name;
+        const deletedRole = user.role;
+
+        // If the deleted user is a mentor, set assigned_to to null for all mentees assigned to this mentor
+        if (deletedRole === "mentor") {
+            await User.update(
+                { assigned_to: null },
+                {
+                    where: {
+                        assigned_to: {
+                            [Op.iLike]: deletedName.trim()
+                        }
+                    }
+                }
+            );
         }
 
         await user.destroy();
