@@ -1,4 +1,7 @@
 const userService = require('../service/userService');
+const { sendLoginCredentials } = require('../service/emailService');
+
+// latest code
 
 const userController = {
 
@@ -11,7 +14,7 @@ const userController = {
                 success: true,
                 message: 'User created successfully',
                 data: user
-            });
+            }); 
         } catch (error) {
             console.error('Error creating user:', error);
 

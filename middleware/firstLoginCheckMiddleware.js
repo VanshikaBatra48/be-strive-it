@@ -28,11 +28,11 @@ const checkFirstLogin = async (req, res, next) => {
 
         req.currentUser = user;
 
-        // If firstLogin is true, enforce redirect to the forget-password URL
+        // If firstLogin is true, enforce redirect to the changePassword URL
         if (user.firstLogin === true) {
             // For standard browser navigation requests
             if (req.accepts("html") && !req.accepts("json") && !req.xhr) {
-                return res.redirect("/forget-password");
+                return res.redirect("/changePassword");
             }
 
             // For REST API / AJAX / Fetch requests
@@ -40,8 +40,8 @@ const checkFirstLogin = async (req, res, next) => {
                 success: false,
                 code: "FIRST_LOGIN_PASSWORD_CHANGE_REQUIRED",
                 firstLogin: true,
-                redirectTo: "/forget-password",
-                message: "First login detected. You must change your password at /forget-password before proceeding."
+                redirectTo: "/changePassword",
+                message: "First login detected. Please set your password or skip at /changePassword."
             });
         }
 

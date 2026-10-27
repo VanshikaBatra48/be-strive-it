@@ -8,6 +8,23 @@ const { checkFirstLogin } = require('../middleware/firstLoginCheckMiddleware');
 // User Login (generates & returns JWT)
 router.post('/users/login', userController.login);
 
+// Current user profile (verifyToken returns current user info including firstLogin)
+router.get('/users/me', verifyToken, (req, res) => {
+    return res.status(200).json({
+        success: true,
+        user: req.user
+    });
+});
+
+// Complete first login / Skip password change (authenticated user or by ID)
+router.patch('/users/complete-first-login', verifyToken, (req, res) => {
+    return userController.completeFirstLogin({ ...req, params: { id: req.user.id } }, res);
+});
+router.patch('/users/:id/complete-first-login', userController.completeFirstLogin);
+
+// Change password (supports authenticated /users/change-password)
+router.patch('/users/change-password', verifyToken, userController.changePassword);
+
 // Create a user
 router.post('/users', verifyToken, checkFirstLogin, userController.createUser);
 
@@ -22,22 +39,6 @@ router.put('/users/:id', verifyToken, checkFirstLogin, userController.updateUser
 // Delete user (supports both /users/delete/:id and /users/:id)
 router.delete('/users/delete/:id', verifyToken, checkFirstLogin, userController.deleteUser);
 router.delete('/users/:id', verifyToken, checkFirstLogin, userController.deleteUser);
-
-// Complete first login
-router.patch('/users/:id/complete-first-login', userController.completeFirstLogin);
-
-// Change password (supports both /users/:id/password and authenticated /users/change-password)
-
-router.patch('/users/change-password', verifyToken, userController.changePassword);
-
-
-// Current user profile (demonstrates verifyToken + checkFirstLogin)
-router.get('/users/me', verifyToken, checkFirstLogin, (req, res) => {
-    return res.status(200).json({
-        success: true,
-        user: req.user
-    });
-});
 
 module.exports = router;
 

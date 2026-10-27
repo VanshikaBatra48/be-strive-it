@@ -12,16 +12,41 @@ const taskRoutes = require('./routes/taskRoute');
 
 const app = express();
 
-app.use(cors({
-    origin: [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://192.168.1.5:5173"
-    ], credentials: true,
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://192.168.1.15:5173',
+    ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map((u) => u.trim()) : []),
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((u) => u.trim()) : [])
+];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-side)
+        if (!origin) return callback(null, true);
+
+        // Allow explicitly listed origins or any local network origin accessing port 5173
+        const isAllowed =
+            allowedOrigins.includes(origin) ||
+            /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):5173$/.test(origin);
+
+        if (isAllowed) {
+            return callback(null, true);
+        }
+        return callback(null, false);
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
-}));
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin'
+    ]
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
@@ -36,6 +61,7 @@ app.get('/', (req, res) => {
     });
 });
 
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
@@ -49,8 +75,9 @@ async function startServer() {
         console.log('Database tables are ready!');
 
         // Step 3: Start the server
-        app.listen(PORT, "0.0.0.0", () => {
+        app.listen(PORT, HOST, () => {
             console.log(`Server running at http://localhost:${PORT}`);
+            console.log(`Network access: http://192.168.1.15:${PORT}`);
         });
 
     } catch (error) {

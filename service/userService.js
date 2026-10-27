@@ -2,6 +2,8 @@ const bcrypt = require("bcrypt");
 const { Op } = require("sequelize");
 const User = require("../models/user");
 const { generateToken } = require("../middleware/authMiddleware");
+const crypto = require('node:crypto');
+
 
 const userService = {
     // Create a new user
@@ -9,10 +11,10 @@ const userService = {
         const {
             name,
             email,
-            password,
+            // password,
             role,
             assigned_to,
-            assignedMentees
+            // assignedMentees
         } = userData;
 
         const existingUser = await User.findOne({
@@ -22,8 +24,15 @@ const userService = {
         if (existingUser) {
             throw new Error("A user with this email already exists");
         }
+        // Generate a temporary password
+        const temporaryPassword =
+            crypto.randomBytes(12).toString('base64url');
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(
+            temporaryPassword,
+            12
+        );
+
 
         let normalizedRole = (role || "admin").trim().toLowerCase();
         if (normalizedRole === "intern") normalizedRole = "mentee";
@@ -32,7 +41,6 @@ const userService = {
             name: name.trim(),
             email: email.trim().toLowerCase(),
             password: hashedPassword,
-            raw_password: password.trim(),
             role: normalizedRole,
             assigned_to: assigned_to || "admin",
             firstLogin: true
@@ -265,7 +273,7 @@ const userService = {
             message: "Login successful",
             token,
             user: userWithoutPassword,
-            redirectTo: user.firstLogin ? "/forget-password" : "/dashboard"
+            redirectTo: user.firstLogin ? "/changePassword" : "/dashboard"
         };
     },
 
