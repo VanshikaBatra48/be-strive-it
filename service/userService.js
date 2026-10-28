@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt");
 const { Op } = require("sequelize");
 const User = require("../models/user");
 const { generateToken } = require("../middleware/authMiddleware");
+const {sendLoginCredentials} = require("../service/emailService");
 const crypto = require('node:crypto');
 
 
@@ -11,10 +12,9 @@ const userService = {
         const {
             name,
             email,
-            // password,
             role,
             assigned_to,
-            // assignedMentees
+            assignedMentees
         } = userData;
 
         const existingUser = await User.findOne({
@@ -68,12 +68,19 @@ const userService = {
             }
         }
 
-        const { password: _, ...userWithoutPassword } = user.toJSON();
+    // Send login credentials to the user's email
+    await sendLoginCredentials(user, temporaryPassword);
 
-        return {
-            ...userWithoutPassword,
-            password: password.trim()
-        };
+    // Remove the password hash from the response
+    const { password: _, ...userWithoutPassword } =
+        user.toJSON();
+
+    // Return user details without the password
+    return {
+        ...userWithoutPassword,
+        message: 'User created and login credentials emailed successfully'
+    };
+
     },
 
     // Filter users by ID, email, role, status, name, or assigned_to
@@ -292,7 +299,7 @@ const userService = {
         }
 
         user.password = await bcrypt.hash(newPassword, 10);
-        user.raw_password = newPassword.trim();
+        // user.raw_password = newPassword.trim();
         user.firstLogin = false; // Successfully changed password sets firstLogin to false
         await user.save();
 

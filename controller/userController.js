@@ -1,5 +1,5 @@
 const userService = require('../service/userService');
-const { sendLoginCredentials } = require('../service/emailService');
+const { sendLoginCredentials } = require("../service/emailService");
 
 // latest code
 
@@ -14,7 +14,7 @@ const userController = {
                 success: true,
                 message: 'User created successfully',
                 data: user
-            }); 
+            });
         } catch (error) {
             console.error('Error creating user:', error);
 
@@ -51,9 +51,9 @@ const userController = {
             });
         }
     },
-    
+
     // Update user details
-    
+
     async updateUser(req, res) {
         try {
             const user = await userService.updateUser(
@@ -246,111 +246,111 @@ module.exports = userController;
 
 
 // // Get users by role
-    // async getUsersByRole(req, res) {
-    //     try {
-    //         const users = await userService.getUsersByRole(
-    //             req.params.role
-    //         );
+// async getUsersByRole(req, res) {
+//     try {
+//         const users = await userService.getUsersByRole(
+//             req.params.role
+//         );
 
-    //         return res.status(200).json({
-    //             success: true,
-    //             count: users.length,
-    //             data: users
-    //         });
-    //     } catch (error) {
-    //         console.error('Error fetching users by role:', error);
+//         return res.status(200).json({
+//             success: true,
+//             count: users.length,
+//             data: users
+//         });
+//     } catch (error) {
+//         console.error('Error fetching users by role:', error);
 
-    //         if (error.message.includes('Invalid role')) {
-    //             return res.status(400).json({
-    //                 success: false,
-    //                 message: error.message
-    //             });
-    //         }
+//         if (error.message.includes('Invalid role')) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
 
-    //         return res.status(500).json({
-    //             success: false,
-    //             message: 'Failed to fetch users by role'
-    //         });
-    //     }
-    // },
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to fetch users by role'
+//         });
+//     }
+// },
 
-    // // Get users by status
-    // async getUsersByStatus(req, res) {
-    //     try {
-    //         const users = await userService.getUsersByStatus(
-    //             req.params.status
-    //         );
+// // Get users by status
+// async getUsersByStatus(req, res) {
+//     try {
+//         const users = await userService.getUsersByStatus(
+//             req.params.status
+//         );
 
-    //         return res.status(200).json({
-    //             success: true,
-    //             count: users.length,
-    //             data: users
-    //         });
-    //     } catch (error) {
-    //         console.error('Error fetching users by status:', error);
+//         return res.status(200).json({
+//             success: true,
+//             count: users.length,
+//             data: users
+//         });
+//     } catch (error) {
+//         console.error('Error fetching users by status:', error);
 
-    //         if (error.message.includes('Invalid status')) {
-    //             return res.status(400).json({
-    //                 success: false,
-    //                 message: error.message
-    //             });
-    //         }
+//         if (error.message.includes('Invalid status')) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
 
-    //         return res.status(500).json({
-    //             success: false,
-    //             message: 'Failed to fetch users by status'
-    //         });
-    //     }
-    // }
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to fetch users by status'
+//         });
+//     }
+// }
 
-    // // Get user by ID
-    // async getUserById(req, res) {
-    //     try {
-    //         const user = await userService.getUserById(req.params.id);
+// // Get user by ID
+// async getUserById(req, res) {
+//     try {
+//         const user = await userService.getUserById(req.params.id);
 
-    //         return res.status(200).json({
-    //             success: true,
-    //             data: user
-    //         });
-    //     } catch (error) {
-    //         console.error('Error fetching user:', error);
+//         return res.status(200).json({
+//             success: true,
+//             data: user
+//         });
+//     } catch (error) {
+//         console.error('Error fetching user:', error);
 
-    //         if (error.message === 'User not found') {
-    //             return res.status(404).json({
-    //                 success: false,
-    //                 message: error.message
-    //             });
-    //         }
+//         if (error.message === 'User not found') {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
 
-    //         return res.status(500).json({
-    //             success: false,
-    //             message: 'Failed to fetch user'
-    //         });
-    //     }
-    // },
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to fetch user'
+//         });
+//     }
+// },
 
-    // // Get user by email
-    // async getUserByEmail(req, res) {
-    //     try {
-    //         const user = await userService.getUserByEmail(req.params.email);
+// // Get user by email
+// async getUserByEmail(req, res) {
+//     try {
+//         const user = await userService.getUserByEmail(req.params.email);
 
-    //         return res.status(200).json({
-    //             success: true,
-    //             data: user
-    //         });
-    //     } catch (error) {
-    //         console.error('Error fetching user by email:', error);
+//         return res.status(200).json({
+//             success: true,
+//             data: user
+//         });
+//     } catch (error) {
+//         console.error('Error fetching user by email:', error);
 
-    //         if (error.message === 'User not found') {
-    //             return res.status(404).json({
-    //                 success: false,
-    //                 message: error.message
-    //             });
-    //         }
+//         if (error.message === 'User not found') {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: error.message
+//             });
+//         }
 
-    //         return res.status(500).json({
-    //             success: false,
-    //             message: 'Failed to fetch user'
-    //         });
-    //     }
-    // },
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to fetch user'
+//         });
+//     }
+// },

@@ -6,7 +6,7 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     }
-}); 
+});
 
 async function sendLoginCredentials(user, temporaryPassword) {
     const loginLink = `${process.env.FRONTEND_URL}/`;
@@ -17,7 +17,7 @@ async function sendLoginCredentials(user, temporaryPassword) {
         subject: 'Your Intern Management System Login Details',
 
         text: `
-Hello ${user.name},
+Hello ${user.name},a
 
 Your ${user.role} account has been created.
 
@@ -69,4 +69,37 @@ function escapeHtml(value = '') {
     })[char]);
 }
 
-module.exports = { sendLoginCredentials };
+async function sendPasswordResetOTP(user, otp) {
+    await transporter.sendMail({
+        from: `"Intern Management System" <${process.env.EMAIL_USER}>`,
+        to: user.email,
+        subject: "Password Reset OTP",
+
+        text: `
+Hello ${user.name},
+
+We received a request to reset your password.
+
+Your OTP is: ${otp}
+
+This OTP expires in 5 minutes.
+
+If you did not request a password reset, please ignore this email.
+        `,
+
+        html: `
+            <h2>Password Reset</h2>
+            <p>Hello ${escapeHtml(user.name)},</p>
+            <p>Use the following OTP to reset your password:</p>
+            <h2>${escapeHtml(otp)}</h2>
+            <p>This OTP expires in 5 minutes.</p>
+            <p>If you did not request a reset, please ignore this email.</p>
+        `,
+    });
+}
+
+
+module.exports = {
+    sendLoginCredentials,
+    sendPasswordResetOTP,
+};

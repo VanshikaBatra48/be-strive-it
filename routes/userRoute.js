@@ -16,10 +16,7 @@ router.get('/users/me', verifyToken, (req, res) => {
     });
 });
 
-// Complete first login / Skip password change (authenticated user or by ID)
-router.patch('/users/complete-first-login', verifyToken, (req, res) => {
-    return userController.completeFirstLogin({ ...req, params: { id: req.user.id } }, res);
-});
+
 router.patch('/users/:id/complete-first-login', userController.completeFirstLogin);
 
 // Change password (supports authenticated /users/change-password)
@@ -33,12 +30,9 @@ router.get('/users', verifyToken, checkFirstLogin, userController.getAllUsers);
 
 // Update user (supports both /users/update/:id and /users/:id)
 router.patch('/users/update/:id', verifyToken, checkFirstLogin, userController.updateUser);
-router.patch('/users/:id', verifyToken, checkFirstLogin, userController.updateUser);
-router.put('/users/:id', verifyToken, checkFirstLogin, userController.updateUser);
 
 // Delete user (supports both /users/delete/:id and /users/:id)
 router.delete('/users/delete/:id', verifyToken, checkFirstLogin, userController.deleteUser);
-router.delete('/users/:id', verifyToken, checkFirstLogin, userController.deleteUser);
 
 module.exports = router;
 

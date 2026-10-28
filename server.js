@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const { sequelize, connectDB } = require('./config/database');
+const passwordResetRoutes = require("./routes/passwordResetRoutes");
 
 // Import models
 require('./models/user');
 require('./models/task');
+require('./models/resetPassword');
 
 // Import routes
 const userRoutes = require('./routes/userRoute');
@@ -53,6 +55,7 @@ app.use(express.json());
 // Register routes
 app.use('/api', userRoutes);
 app.use('/api', taskRoutes);
+app.use("/api", passwordResetRoutes);
 
 // Test route
 app.get('/', (req, res) => {
@@ -68,21 +71,34 @@ async function startServer() {
     try {
         // Step 1: Connect to PostgreSQL
         await connectDB();
+        console.log('PostgreSQL connected successfully.');
 
-        // Step 2: Create tables for imported models if they don't exist
+        // Step 2: Synchronize Sequelize models
         await sequelize.sync();
-
         console.log('Database tables are ready!');
 
-        // Step 3: Start the server
-        app.listen(PORT, HOST, () => {
+        // Step 3: Start Express and listen continuously for requests
+        const server = app.listen(PORT, HOST, () => {
             console.log(`Server running at http://localhost:${PORT}`);
             console.log(`Network access: http://192.168.1.15:${PORT}`);
+            console.log('Waiting for incoming requests...');
         });
+
+        // Handle server startup and listening errors
+        server.on('error', (error) => {
+            console.error('HTTP server error:', error);
+        });
+
+        // Log when the server closes unexpectedly
+        server.on('close', () => {
+            console.log('HTTP server has closed.');
+        });
+
+        return server;
 
     } catch (error) {
         console.error('Unable to start server:', error);
-        process.exit(1);
+        process.exitCode = 1;
     }
 }
 
