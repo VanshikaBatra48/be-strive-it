@@ -1,0 +1,33 @@
+import 'dotenv/config';
+import { Sequelize } from 'sequelize';
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+export const sequelize = new Sequelize(
+  requireEnv('DB_NAME'),
+  requireEnv('DB_USER'),
+  requireEnv('DB_PASSWORD'),
+  {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    dialect: 'postgres',
+    logging: false,
+  }
+);
+
+export async function connectDB(): Promise<void> {
+  try {
+    await sequelize.authenticate();
+    console.log('PostgreSQL connected successfully!');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Database connection failed:', message);
+    throw error;
+  }
+}
