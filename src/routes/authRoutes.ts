@@ -3,10 +3,12 @@ import type { Request, Response } from 'express';
 
 import { login } from '../controllers/authController';
 import { authenticate, authorize } from '../middleware/authMiddleware';
+import { validate } from '../middleware/validate';          // NEW
+import { loginSchema } from '../schemas/userSchema';        // NEW
 
 const router = Router();
 
-router.post('/login', login);
+router.post('/login', validate(loginSchema), login);        // CHANGED
 
 router.get('/me', authenticate, (req: Request, res: Response) => {
   res.status(200).json({
