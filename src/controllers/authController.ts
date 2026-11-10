@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import type { SignOptions } from 'jsonwebtoken';
 import User from '../models/user';
+import type { LoginBody } from '../schemas/userSchema';
 
 // Reusable JWT token generation function
 export const createToken = (
@@ -25,35 +26,20 @@ export const createToken = (
 };
 
 // POST /api/auth/login
-export const login = async (req: Request, res: Response): Promise<void> => {
+export const login = async (
+  req: Request<{}, {}, LoginBody>,
+  res: Response
+): Promise<void> => {
   try {
-    const { email, password } = req.body as {
-      email?: unknown;
-      password?: unknown;
-    };
+    // Already validated and normalized (trimmed, lowercased) by Zod (loginSchema)
+    const { email, password } = req.body;
 
-    // 1. Validate request data
-    if (
-      typeof email !== 'string' ||
-      typeof password !== 'string' ||
-      !email.trim() ||
-      !password
-    ) {
-      res.status(400).json({
-        success: false,
-        message: 'Email and password are required',
-      });
-      return;
-    }
-
-    // 2. Find user by email
+    // 1. Find user by email
     const user = await User.findOne({
-      where: {
-        email: email.trim().toLowerCase(),
-      },
+      where: { email },
     });
 
-    // 3. Check whether user exists
+    // 2. Check whether user exists
     if (!user) {
       res.status(401).json({
         success: false,
@@ -62,11 +48,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 4. Verify password
-    const isPasswordValid = await bcrypt.compare(
-      password,
-      user.password
-    );
+    // 3. Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       res.status(401).json({
@@ -76,7 +59,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 5. Check first login
+    // 4. Check first login
     if (user.firstLogin === true) {
       // Generate short-lived password-change token
       const passwordToken = createToken(
@@ -104,14 +87,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 6. Generate normal access token
+    // 5. Generate normal access token
     const accessToken = createToken({
       id: user.id,
       role: user.role,
       purpose: 'access',
     });
 
-    // 7. Return successful login response
+    // 6. Return successful login response
     res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -125,7 +108,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         role: user.role,
       },
     });
-
   } catch (error) {
     console.error('Login controller error:', error);
 
