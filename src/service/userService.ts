@@ -91,6 +91,9 @@ const userService = {
       password: hashedPassword,
       role: normalizedRole,
       assigned_to: assigned_to || 'admin',
+      assignedMentees: normalizedRole === 'mentor' && Array.isArray(assignedMentees)
+    ? assignedMentees
+    : [],
       firstLogin: true,
     });
 
