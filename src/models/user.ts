@@ -20,6 +20,7 @@ class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
   declare joined: CreationOptional<Date>;
   declare status: CreationOptional<UserStatus>;
   declare firstLogin: CreationOptional<boolean>;
+   declare assignedMentees: CreationOptional<(string | number)[]>;
 
   // Added automatically by Sequelize because timestamps: true
   declare readonly createdAt: CreationOptional<Date>;
@@ -49,6 +50,11 @@ User.init(
       type: DataTypes.STRING,
       allowNull: true,
       defaultValue: 'admin',
+    },
+    assignedMentees: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: [],
     },
     password: {
       type: DataTypes.STRING,
