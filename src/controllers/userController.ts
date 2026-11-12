@@ -210,7 +210,7 @@ const userController = {
 
       const result = await userService.changePassword(
         userId,
-        currentPassword,
+        //currentPassword,
         newPassword
       );
 

@@ -9,17 +9,21 @@ import { sequelize, connectDB } from './src/config/database';
 
 import './src/models/user';
 import './src/models/resetPassword';
+import './src/models/notification';
 
 // Import routes
 import userRoutes from './src/routes/userRoute';
 
 import passwordResetRoutes from './src/routes/passwordResetRoutes';
-
+import notificationRoutes from './src/routes/notificationRoutes'; 
+import { authenticate } from './src/middleware/authMiddleware';
+//import { initSocket } from '../socket'; // NEW
 const app = express();
 
 const allowedOrigins: string[] = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:5174',
 ];
 
 const corsOptions: CorsOptions = {
@@ -43,6 +47,9 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions));
 
 app.use(express.json());
+
+
+app.use('/api/notifications', authenticate, notificationRoutes);
 
 // Register routes
 app.use('/api', userRoutes);

@@ -406,7 +406,7 @@ const userService = {
   // Change a user's password
 async changePassword(
   userId: string | number,
-  currentPassword: string,
+  //currentPassword: string,
   newPassword: string
 ) {
   // Find user in database
@@ -417,15 +417,15 @@ async changePassword(
   }
 
   // Compare entered current password with stored hashed password
-  const isPasswordCorrect = await bcrypt.compare(
-    currentPassword,
-    user.password
-  );
+  // const isPasswordCorrect = await bcrypt.compare(
+  //   currentPassword,
+  //   user.password
+  // );
 
   // Reject if current password does not match
-  if (!isPasswordCorrect) {
-    throw new Error('Current password is incorrect');
-  }
+  // if (!isPasswordCorrect) {
+  //   throw new Error('Current password is incorrect');
+  // }
 
   // Hash the new password
   const hashedPassword = await bcrypt.hash(newPassword, 12);
