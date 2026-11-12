@@ -4,23 +4,40 @@ import {
   InferAttributes,
   InferCreationAttributes,
   CreationOptional,
+  NonAttribute,
 } from 'sequelize';
 import { sequelize } from '../config/database';
+import type User from './user';
 
 export type TaskCategory = 'upskill' | 'research' | 'client-project' | 'inhouse-project';
-export type TaskStatus = 'in-progress' | 'complete' | 'hold';
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'in-progress' | 'submitted' | 'needs-revision' | 'complete' | 'hold';
 
 class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare id: CreationOptional<number>;
   declare title: string;
   declare description: string;
   declare category: CreationOptional<TaskCategory>;
+  declare priority: CreationOptional<TaskPriority>;
   declare start_date: Date;
   declare due_date: Date;
   declare estimated_hours: number;
   declare mentee_id: number;
   declare assigned_by: number;
   declare status: CreationOptional<TaskStatus>;
+  declare submission_url: CreationOptional<string | null>;
+  declare demo_url: CreationOptional<string | null>;
+  declare submission_notes: CreationOptional<string | null>;
+  declare submitted_at: CreationOptional<Date | null>;
+  declare score: CreationOptional<number | null>;
+  declare feedback: CreationOptional<string | null>;
+  declare evaluated_by: CreationOptional<number | null>;
+  declare evaluated_at: CreationOptional<Date | null>;
+
+  // Associations
+  declare mentee?: NonAttribute<User | null>;
+  declare assigner?: NonAttribute<User | null>;
+  declare evaluator?: NonAttribute<User | null>;
 
   // Managed by Sequelize (timestamps + paranoid)
   declare readonly createdAt: CreationOptional<Date>;
@@ -48,6 +65,11 @@ Task.init(
       allowNull: false,
       defaultValue: 'upskill',
     },
+    priority: {
+      type: DataTypes.ENUM('low', 'medium', 'high'),
+      allowNull: false,
+      defaultValue: 'medium',
+    },
     start_date: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -69,9 +91,45 @@ Task.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM('in-progress', 'complete', 'hold'),
+      type: DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold'),
       allowNull: false,
       defaultValue: 'in-progress',
+    },
+    submission_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    demo_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    submission_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    submitted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    score: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: {
+        min: 0,
+        max: 100,
+      },
+    },
+    feedback: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    evaluated_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    evaluated_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
@@ -82,8 +140,8 @@ Task.init(
     tableName: 'tasks',
     modelName: 'Task',
     timestamps: true,
-    underscored: true, // createdAt -> created_at, updatedAt -> updated_at
-    paranoid: true,    // deletedAt -> deleted_at, enables soft delete
+    underscored: true,
+    paranoid: true,
   }
 );
 

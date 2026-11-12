@@ -4,6 +4,7 @@ import {
   InferAttributes,
   InferCreationAttributes,
   CreationOptional,
+  NonAttribute,
 } from 'sequelize';
 import { sequelize } from '../config/database';
 
@@ -15,12 +16,17 @@ class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
   declare name: string;
   declare email: string;
   declare assigned_to: CreationOptional<string | null>;
+  declare mentor_id: CreationOptional<number | null>;
   declare password: string;
   declare role: CreationOptional<UserRole>;
   declare joined: CreationOptional<Date>;
   declare status: CreationOptional<UserStatus>;
   declare firstLogin: CreationOptional<boolean>;
-   declare assignedMentees: CreationOptional<(string | number)[]>;
+  declare assignedMentees: CreationOptional<(string | number)[]>;
+
+  // Self-referential associations (Mentor <-> Mentees)
+  declare mentor?: NonAttribute<User | null>;
+  declare mentees?: NonAttribute<User[]>;
 
   // Added automatically by Sequelize because timestamps: true
   declare readonly createdAt: CreationOptional<Date>;
@@ -49,10 +55,21 @@ User.init(
     assigned_to: {
       type: DataTypes.STRING,
       allowNull: true,
-      defaultValue: 'admin',
+      defaultValue: null,
+    },
+    mentor_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'SET NULL',
     },
     assignedMentees: {
-      type: DataTypes.JSON,
+      type: DataTypes.JSONB,
       allowNull: false,
       defaultValue: [],
     },

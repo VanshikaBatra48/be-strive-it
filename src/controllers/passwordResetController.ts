@@ -141,6 +141,13 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    if (errorMessage === 'New password cannot be the same as the old password') {
+      res.status(400).json({
+        message: errorMessage,
+      });
+      return;
+    }
+
     console.error('Password reset error:', errorMessage);
 
     res.status(500).json({

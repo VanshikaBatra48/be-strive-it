@@ -12,9 +12,13 @@ declare global {
         role: UserRole;
         status: UserStatus;
         firstLogin: boolean;
+        mentor_id: number | null;
+        assigned_to: string | null;
+        assignedMentees: number[];
       };
 
       currentUser?: User;
+      validatedQuery?: Record<string, unknown>;
     }
   }
 }

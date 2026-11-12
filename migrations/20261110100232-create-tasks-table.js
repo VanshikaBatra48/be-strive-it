@@ -69,7 +69,7 @@ module.exports = {
       }
     });
       await queryInterface.sequelize.query(
-      'ALTER TABLE "tasks" ADD CONSTRAINT "tasks_due_after_start" CHECK (due_at >= start_date);'
+      'ALTER TABLE "tasks" ADD CONSTRAINT "tasks_due_after_start" CHECK (due_date >= start_date);'
     );
     await queryInterface.sequelize.query(
       'ALTER TABLE "tasks" ADD CONSTRAINT "tasks_hours_positive" CHECK (estimated_hours > 0);'
@@ -77,7 +77,7 @@ module.exports = {
 
     await queryInterface.addIndex('tasks', ['mentee_id', 'status']);
     await queryInterface.addIndex('tasks', ['assigned_by']);
-    await queryInterface.addIndex('tasks', ['due_at']);
+    await queryInterface.addIndex('tasks', ['due_date']);
   },
 
 
