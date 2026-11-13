@@ -87,19 +87,35 @@ export const notifyTaskAssigned = (
     { transaction: tx }
   );
 
+// ---------- Due date reminders ----------
+export type DueReminderKind = '24h' | '1h';
+
+function formatDueDate(date: Date): string {
+  return new Date(date).toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata',
+  });
+}
+
 export const notifyTaskDueDate = (
   mentee_id: number,
   task: TaskRef,
   dueDate: Date,
+  kind: DueReminderKind = '24h',
   tx?: Transaction
 ) =>
   createNotification(
     {
       user_id: mentee_id,
       type: 'TASK_DUE_DATE',
-      title: 'Task due soon',
-      message: `"${task.title}" is due on ${new Date(dueDate).toDateString()}`,
-      data: { taskId: task.id, dueDate: new Date(dueDate).toISOString() },
+      title: kind === '1h' ? 'Task due within 1 hour' : 'Task due within 24 hours',
+      message: `"${task.title}" is due on ${formatDueDate(dueDate)}`,
+      data: {
+        taskId: task.id,
+        dueDate: new Date(dueDate).toISOString(),
+        reminder: kind,
+      },
     },
     { transaction: tx }
   );
