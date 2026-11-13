@@ -10,8 +10,14 @@ const firstLoginCheckMiddleware_1 = require("../middleware/firstLoginCheckMiddle
 const validate_1 = require("../middleware/validate");
 const userSchema_1 = require("../schemas/userSchema");
 const router = (0, express_1.Router)();
-// User Login (generates & returns JWT)
+// User Login (generates access token + sets httpOnly refresh cookie)
 router.post('/users/login', (0, validate_1.validate)(userSchema_1.loginSchema), userController_1.default.login);
+// Refresh access token using httpOnly refresh cookie (rotates refresh token)
+router.post('/users/refresh', userController_1.default.refresh);
+// Logout current device (revokes cookie refresh token & clears cookie)
+router.post('/users/logout', userController_1.default.logout);
+// Logout from all devices (authenticated)
+router.post('/users/logout-all', authMiddleware_1.verifyToken, userController_1.default.logoutAll);
 // Current user profile (accessible before first-login password change completes)
 router.get('/users/me', authMiddleware_1.verifyToken, userController_1.default.getMe);
 // Complete first login (authenticated user themselves or admin)

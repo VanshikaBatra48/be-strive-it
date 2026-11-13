@@ -262,20 +262,27 @@ const userService = {
                 include: MENTOR_PUBLIC_INCLUDE,
                 transaction,
             });
-            return hydrated ?? user;
+            const finalUser = hydrated ?? user;
+            if (!customPassword) {
+                try {
+                    await (0, emailService_1.sendLoginCredentials)(finalUser, initialPassword);
+                }
+                catch (mailError) {
+                    console.error('Failed to send login credentials email:', mailError);
+                    throw new Error('Failed to send login credentials email. User creation was rolled back.');
+                }
+            }
+            return finalUser;
         });
         let emailMessage = 'User created and login credentials emailed successfully';
-        try {
-            await (0, emailService_1.sendLoginCredentials)(createdUser, initialPassword);
-        }
-        catch (mailError) {
-            console.error('Failed to send login credentials email:', mailError);
-            if (!customPassword) {
-                // Generated password would otherwise be lost; compensate cleanly
-                await createdUser.destroy({ force: true });
-                throw new Error('Failed to send login credentials email. User creation was rolled back.');
+        if (customPassword) {
+            try {
+                await (0, emailService_1.sendLoginCredentials)(createdUser, initialPassword);
             }
-            emailMessage = 'User created successfully (credential email could not be delivered)';
+            catch (mailError) {
+                console.error('Failed to send login credentials email:', mailError);
+                emailMessage = 'User created successfully (credential email could not be delivered)';
+            }
         }
         return {
             ...serializePublicUser(createdUser),
@@ -722,34 +729,58 @@ const userService = {
         };
     },
     // Change a user's password
-    async changePassword(userId, newPassword) {
-        const user = await user_1.default.findByPk(userId);
+    async changePassword(userId, newPassword, currentPassword) {
+        const user = await user_1.default.findByPk(userId, {
+            include: MENTOR_PUBLIC_INCLUDE,
+        });
         if (!user) {
-            throw new Error('User not found');
+            throw new UserServiceError(404, 'User not found');
+        }
+        if (currentPassword !== undefined) {
+            const matchesCurrent = await bcrypt_1.default.compare(currentPassword, user.password);
+            if (!matchesCurrent) {
+                throw new UserServiceError(400, 'Current password is incorrect');
+            }
         }
         const isSamePassword = await bcrypt_1.default.compare(newPassword, user.password);
         if (isSamePassword) {
-            throw new Error('New password cannot be the same as the old password');
+            throw new UserServiceError(400, 'New password cannot be the same as the old password');
         }
         const hashedPassword = await bcrypt_1.default.hash(newPassword, BCRYPT_ROUNDS);
         await user.update({
             password: hashedPassword,
             firstLogin: false,
         });
-        const { password: _password, ...userWithoutPassword } = user.toJSON();
         const token = (0, authMiddleware_1.generateToken)({
             id: user.id,
             email: user.email,
             role: user.role,
             firstLogin: false,
         });
+        let fallbackMap;
+        if (user.role === 'mentee' && !user.mentor && user.assigned_to) {
+            const legacyName = normalizeAssignedTo(user.assigned_to);
+            if (legacyName) {
+                const legacyMentor = await findMentorByName(legacyName);
+                if (legacyMentor) {
+                    fallbackMap = new Map([
+                        [
+                            legacyName.toLowerCase(),
+                            {
+                                id: legacyMentor.id,
+                                name: legacyMentor.name,
+                                email: legacyMentor.email,
+                                status: legacyMentor.status,
+                            },
+                        ],
+                    ]);
+                }
+            }
+        }
         return {
             message: 'Password changed successfully',
             token,
-            user: {
-                ...userWithoutPassword,
-                firstLogin: false,
-            },
+            user: serializePublicUser(user, fallbackMap),
         };
     },
     // Delete a user (and cascade-delete tasks assigned to deleted mentees)

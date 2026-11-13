@@ -1,6 +1,7 @@
 import User from './user';
 import Task from './tasks';
 import PasswordReset from './resetPassword';
+import RefreshToken from './refreshToken';
 
 let initialized = false;
 
@@ -22,8 +23,10 @@ export function initAssociations(): void {
   User.hasMany(PasswordReset, { as: 'passwordResets', foreignKey: 'userId' });
   PasswordReset.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 
+  User.hasMany(RefreshToken, { as: 'refreshTokens', foreignKey: 'userId' });
+  RefreshToken.belongsTo(User, { as: 'user', foreignKey: 'userId' });
+
   initialized = true;
 }
 
 export default initAssociations;
-

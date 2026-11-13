@@ -6,11 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const database_1 = require("./src/config/database");
 require("./src/models/user");
 require("./src/models/tasks");
 require("./src/models/resetPassword");
+require("./src/models/refreshToken");
 const associations_1 = require("./src/models/associations");
+const tokenService_1 = require("./src/service/tokenService");
 // Import routes
 const userRoute_1 = __importDefault(require("./src/routes/userRoute"));
 const taskRoutes_1 = __importDefault(require("./src/routes/taskRoutes"));
@@ -45,6 +48,7 @@ const corsOptions = {
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
+app.use((0, cookie_parser_1.default)());
 // Register routes
 app.use('/api', userRoute_1.default);
 app.use('/api/tasks', taskRoutes_1.default);
@@ -84,10 +88,21 @@ app.use((err, _req, res, _next) => {
 });
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT) || 3000;
+const TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 async function startServer() {
     try {
         // Connect and verify PostgreSQL connection (schema is managed via migrations)
         await (0, database_1.connectDB)();
+        // Clean up any expired refresh tokens on startup and every 24h
+        void (0, tokenService_1.deleteExpiredTokens)().catch((err) => {
+            console.error('Failed to clean expired refresh tokens:', err);
+        });
+        const cleanupTimer = setInterval(() => {
+            void (0, tokenService_1.deleteExpiredTokens)().catch((err) => {
+                console.error('Failed to clean expired refresh tokens:', err);
+            });
+        }, TOKEN_CLEANUP_INTERVAL_MS);
+        cleanupTimer.unref();
         const server = app.listen(PORT, HOST, () => {
             console.log(`Server running at http://${HOST}:${PORT}`);
             console.log('Waiting for incoming requests...');
@@ -96,6 +111,7 @@ async function startServer() {
             console.error('HTTP server error:', error);
         });
         server.on('close', () => {
+            clearInterval(cleanupTimer);
             console.log('HTTP server has closed.');
         });
         return server;

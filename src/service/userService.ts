@@ -408,22 +408,30 @@ const userService = {
         transaction,
       });
 
-      return hydrated ?? user;
+      const finalUser = hydrated ?? user;
+
+      if (!customPassword) {
+        try {
+          await sendLoginCredentials(finalUser, initialPassword);
+        } catch (mailError) {
+          console.error('Failed to send login credentials email:', mailError);
+          throw new Error(
+            'Failed to send login credentials email. User creation was rolled back.'
+          );
+        }
+      }
+
+      return finalUser;
     });
 
     let emailMessage = 'User created and login credentials emailed successfully';
-    try {
-      await sendLoginCredentials(createdUser, initialPassword);
-    } catch (mailError) {
-      console.error('Failed to send login credentials email:', mailError);
-      if (!customPassword) {
-        // Generated password would otherwise be lost; compensate cleanly
-        await createdUser.destroy({ force: true });
-        throw new Error(
-          'Failed to send login credentials email. User creation was rolled back.'
-        );
+    if (customPassword) {
+      try {
+        await sendLoginCredentials(createdUser, initialPassword);
+      } catch (mailError) {
+        console.error('Failed to send login credentials email:', mailError);
+        emailMessage = 'User created successfully (credential email could not be delivered)';
       }
-      emailMessage = 'User created successfully (credential email could not be delivered)';
     }
 
     return {
@@ -973,16 +981,29 @@ const userService = {
   },
 
   // Change a user's password
-  async changePassword(userId: string | number, newPassword: string) {
-    const user = await User.findByPk(userId);
+  async changePassword(
+    userId: string | number,
+    newPassword: string,
+    currentPassword?: string
+  ) {
+    const user = await User.findByPk(userId, {
+      include: MENTOR_PUBLIC_INCLUDE,
+    });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new UserServiceError(404, 'User not found');
+    }
+
+    if (currentPassword !== undefined) {
+      const matchesCurrent = await bcrypt.compare(currentPassword, user.password);
+      if (!matchesCurrent) {
+        throw new UserServiceError(400, 'Current password is incorrect');
+      }
     }
 
     const isSamePassword = await bcrypt.compare(newPassword, user.password);
     if (isSamePassword) {
-      throw new Error('New password cannot be the same as the old password');
+      throw new UserServiceError(400, 'New password cannot be the same as the old password');
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
@@ -992,7 +1013,6 @@ const userService = {
       firstLogin: false,
     });
 
-    const { password: _password, ...userWithoutPassword } = user.toJSON();
     const token = generateToken({
       id: user.id,
       email: user.email,
@@ -1000,13 +1020,31 @@ const userService = {
       firstLogin: false,
     });
 
+    let fallbackMap: Map<string, MentorSummary> | undefined;
+    if (user.role === 'mentee' && !user.mentor && user.assigned_to) {
+      const legacyName = normalizeAssignedTo(user.assigned_to);
+      if (legacyName) {
+        const legacyMentor = await findMentorByName(legacyName);
+        if (legacyMentor) {
+          fallbackMap = new Map([
+            [
+              legacyName.toLowerCase(),
+              {
+                id: legacyMentor.id,
+                name: legacyMentor.name,
+                email: legacyMentor.email,
+                status: legacyMentor.status,
+              },
+            ],
+          ]);
+        }
+      }
+    }
+
     return {
       message: 'Password changed successfully',
       token,
-      user: {
-        ...userWithoutPassword,
-        firstLogin: false,
-      },
+      user: serializePublicUser(user, fallbackMap),
     };
   },
 

@@ -6,6 +6,7 @@ import { sequelize } from '../config/database';
 import User from '../models/user';
 import PasswordReset from '../models/resetPassword';
 import { sendPasswordResetOTP } from './emailService';
+import { revokeAllForUser } from './tokenService';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const RESET_TOKEN_EXPIRY_MS = 15 * 60 * 1000;
@@ -91,18 +92,6 @@ export async function verifyResetOTP(
   }
 
   if (resetRequest.verifiedAt) {
-    // If already verified and token has not expired or been used, re-issue a valid reset token
-    if (
-      resetRequest.resetTokenExpiresAt &&
-      resetRequest.resetTokenExpiresAt.getTime() > Date.now() &&
-      !resetRequest.usedAt
-    ) {
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      resetRequest.resetTokenHash = hashResetToken(resetToken);
-      resetRequest.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
-      await resetRequest.save();
-      return { resetToken };
-    }
     throw new Error('OTP_ALREADY_VERIFIED');
   }
 
@@ -202,6 +191,9 @@ export async function resetPassword(
     await resetRequest.save({ transaction });
 
     await transaction.commit();
+
+    // Revoke all active refresh token sessions after a password reset
+    await revokeAllForUser(user.id);
 
     return { message: 'Password reset successfully' };
   } catch (error) {

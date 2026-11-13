@@ -13,6 +13,7 @@ const database_1 = require("../config/database");
 const user_1 = __importDefault(require("../models/user"));
 const resetPassword_1 = __importDefault(require("../models/resetPassword"));
 const emailService_1 = require("./emailService");
+const tokenService_1 = require("./tokenService");
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const RESET_TOKEN_EXPIRY_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -76,16 +77,6 @@ async function verifyResetOTP(email, submittedOTP) {
         throw new Error('OTP_EXPIRED');
     }
     if (resetRequest.verifiedAt) {
-        // If already verified and token has not expired or been used, re-issue a valid reset token
-        if (resetRequest.resetTokenExpiresAt &&
-            resetRequest.resetTokenExpiresAt.getTime() > Date.now() &&
-            !resetRequest.usedAt) {
-            const resetToken = node_crypto_1.default.randomBytes(32).toString('hex');
-            resetRequest.resetTokenHash = hashResetToken(resetToken);
-            resetRequest.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
-            await resetRequest.save();
-            return { resetToken };
-        }
         throw new Error('OTP_ALREADY_VERIFIED');
     }
     if (resetRequest.attempts >= MAX_ATTEMPTS) {
@@ -157,6 +148,8 @@ async function resetPassword(resetToken, newPassword) {
         resetRequest.resetTokenExpiresAt = null;
         await resetRequest.save({ transaction });
         await transaction.commit();
+        // Revoke all active refresh token sessions after a password reset
+        await (0, tokenService_1.revokeAllForUser)(user.id);
         return { message: 'Password reset successfully' };
     }
     catch (error) {

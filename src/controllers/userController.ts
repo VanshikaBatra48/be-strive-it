@@ -8,6 +8,18 @@ import type {
   LoginBody,
   ChangePasswordBody,
 } from '../schemas/userSchema';
+import User from '../models/user';
+import { generateAccessToken } from '../middleware/authMiddleware';
+import {
+  REFRESH_COOKIE_NAME,
+  RefreshTokenError,
+  createRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  revokeAllForUser,
+  setRefreshCookie,
+  clearRefreshCookie,
+} from '../service/tokenService';
 
 // ---------- Helpers ----------
 
@@ -31,7 +43,7 @@ const userController = {
   ): Promise<void> {
     try {
       // Body is already validated by Zod (createUserSchema)
-      const result = await userService.createUser(req.body); 
+      const result = await userService.createUser(req.body);
 
       res.status(201).json({
         success: true,
@@ -161,6 +173,12 @@ const userController = {
       // id and body are already validated by Zod (updateUserSchema)
       const user = await userService.updateUser(req.params.id, req.body);
 
+      // If the account was deactivated, kill its sessions immediately
+      // (the access token will also be rejected by verifyToken's status check)
+      if (req.body.status && req.body.status !== 'active') {
+        await revokeAllForUser(Number(req.params.id));
+      }
+
       res.status(200).json({
         success: true,
         message: 'User updated successfully.',
@@ -241,7 +259,7 @@ const userController = {
   },
 
   // ==========================================
-  // 6. User login
+  // 6. User login -> access token (JSON) + refresh token (httpOnly cookie)
   // ==========================================
   async login(
     req: Request<{}, {}, LoginBody>,
@@ -251,12 +269,17 @@ const userController = {
       // email and password are guaranteed strings by Zod (loginSchema)
       const { email, password } = req.body;
 
+      // userService.login signs result.token via generateToken(), which is
+      // now the short-lived access token.
       const result = await userService.login(email, password);
+
+      const refreshToken = await createRefreshToken(Number(result.user.id));
+      setRefreshCookie(res, refreshToken);
 
       res.status(200).json({
         success: true,
         message: result.message,
-        token: result.token,
+        accessToken: result.token,
         user: result.user,
         redirectTo: result.redirectTo,
       });
@@ -290,48 +313,163 @@ const userController = {
   },
 
   // ==========================================
+  // 6b. Refresh: rotate refresh token, return a new access token
+  // Public route (no verifyToken) - it authenticates via the cookie.
+  // ==========================================
+  async refresh(req: Request, res: Response): Promise<void> {
+    try {
+      const rawToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
+
+      if (!rawToken) {
+        res.status(401).json({
+          success: false,
+          code: 'NO_REFRESH_TOKEN',
+          message: 'No refresh token provided.',
+        });
+        return;
+      }
+
+      const { userId, newToken } = await rotateRefreshToken(rawToken);
+
+      const user = await User.findByPk(userId, {
+        attributes: { exclude: ['password'] },
+      });
+
+      if (!user || user.status !== 'active') {
+        await revokeAllForUser(userId);
+        clearRefreshCookie(res);
+        res.status(401).json({
+          success: false,
+          code: 'ACCOUNT_UNAVAILABLE',
+          message: 'Account no longer exists or is deactivated.',
+        });
+        return;
+      }
+
+      setRefreshCookie(res, newToken);
+
+      const accessToken = generateAccessToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        firstLogin: user.firstLogin,
+      });
+
+      const profile = await userService.getUserById(user.id);
+
+      res.status(200).json({
+        success: true,
+        accessToken,
+        user: profile,
+      });
+    } catch (error) {
+      clearRefreshCookie(res);
+
+      if (error instanceof RefreshTokenError) {
+        res.status(401).json({
+          success: false,
+          code: 'INVALID_REFRESH_TOKEN',
+          message: error.message,
+        });
+        return;
+      }
+
+      console.error('Error refreshing token:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to refresh session.',
+      });
+    }
+  },
+
+  // ==========================================
+  // 6c. Logout (this device). Works even if the access token has expired.
+  // ==========================================
+  async logout(req: Request, res: Response): Promise<void> {
+    try {
+      const rawToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
+      if (rawToken) {
+        await revokeRefreshToken(rawToken);
+      }
+      clearRefreshCookie(res);
+
+      res.status(200).json({ success: true, message: 'Logged out successfully.' });
+    } catch (error) {
+      console.error('Error logging out:', error);
+      clearRefreshCookie(res);
+      res.status(500).json({ success: false, message: 'Failed to log out.' });
+    }
+  },
+
+  // ==========================================
+  // 6d. Logout from all devices (authenticated)
+  // ==========================================
+  async logoutAll(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, message: 'Authentication required.' });
+        return;
+      }
+
+      await revokeAllForUser(req.user.id);
+      clearRefreshCookie(res);
+
+      res.status(200).json({ success: true, message: 'Logged out from all devices.' });
+    } catch (error) {
+      console.error('Error logging out everywhere:', error);
+      res.status(500).json({ success: false, message: 'Failed to log out.' });
+    }
+  },
+
+  // ==========================================
   // 7. Change user password (authenticated user)
+  // Revokes every existing session, then starts a fresh one for this device.
   // ==========================================
   async changePassword(req: Request, res: Response): Promise<void> {
-  try {
-    const { newPassword } = req.body as {
-      newPassword?: string;
-    };
+    try {
+      const { newPassword } = req.body as {
+        newPassword?: string;
+      };
 
-    if (!newPassword) {
-      res.status(400).json({
-        success: false,
-        message: 'New password is required',
-      });
-      return;
-    }
-    
-    if (newPassword.length < 8 || newPassword.length > 72) {
-      res.status(400).json({
-        success: false,
-        message: 'New password must be between 8 and 72 characters',
-      });
-      return;
-    }
+      if (!newPassword) {
+        res.status(400).json({
+          success: false,
+          message: 'New password is required',
+        });
+        return;
+      }
 
-    // Get authenticated user's ID
-    const userId = req.user?.id;
+      if (newPassword.length < 8 || newPassword.length > 72) {
+        res.status(400).json({
+          success: false,
+          message: 'New password must be between 8 and 72 characters',
+        });
+        return;
+      }
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: 'Not authenticated',
-      });
-      return;
-    }
+      // Get authenticated user's ID
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Not authenticated',
+        });
+        return;
+      }
 
       // Call service to verify and update password
       const result = await userService.changePassword(userId, newPassword);
 
+      // Invalidate all old sessions (other devices), then issue a new one here
+      await revokeAllForUser(userId);
+      const refreshToken = await createRefreshToken(userId);
+      setRefreshCookie(res, refreshToken);
+
       res.status(200).json({
         success: true,
         message: result.message,
-        token: result.token,
+        accessToken: result.token,
         user: result.user,
       });
     } catch (error) {
@@ -381,6 +519,8 @@ const userController = {
         : undefined;
 
       const result = await userService.deleteUser(req.params.id, actor);
+
+      await revokeAllForUser(Number(req.params.id));
 
       res.status(200).json({
         success: true,

@@ -3,6 +3,7 @@ import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import type { CorsOptions } from 'cors';
+import cookieParser from 'cookie-parser';
 import type { Server } from 'node:http';
 
 import { connectDB } from './src/config/database';
@@ -10,7 +11,9 @@ import { connectDB } from './src/config/database';
 import './src/models/user';
 import './src/models/tasks';
 import './src/models/resetPassword';
+import './src/models/refreshToken';
 import { initAssociations } from './src/models/associations';
+import { deleteExpiredTokens } from './src/service/tokenService';
 
 // Import routes
 import userRoutes from './src/routes/userRoute';
@@ -57,6 +60,8 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
+
+app.use(cookieParser());
 
 // Register routes
 app.use('/api', userRoutes);
@@ -105,11 +110,23 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT: number = Number(process.env.PORT) || 3000;
+const TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function startServer(): Promise<Server | undefined> {
   try {
     // Connect and verify PostgreSQL connection (schema is managed via migrations)
     await connectDB();
+
+    // Clean up any expired refresh tokens on startup and every 24h
+    void deleteExpiredTokens().catch((err) => {
+      console.error('Failed to clean expired refresh tokens:', err);
+    });
+    const cleanupTimer = setInterval(() => {
+      void deleteExpiredTokens().catch((err) => {
+        console.error('Failed to clean expired refresh tokens:', err);
+      });
+    }, TOKEN_CLEANUP_INTERVAL_MS);
+    cleanupTimer.unref();
 
     const server = app.listen(PORT, HOST, () => {
       console.log(`Server running at http://${HOST}:${PORT}`);
@@ -121,6 +138,7 @@ async function startServer(): Promise<Server | undefined> {
     });
 
     server.on('close', () => {
+      clearInterval(cleanupTimer);
       console.log('HTTP server has closed.');
     });
 

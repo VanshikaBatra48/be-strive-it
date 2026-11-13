@@ -16,8 +16,17 @@ import {
 
 const router = Router();
 
-// User Login (generates & returns JWT)
+// User Login (generates access token + sets httpOnly refresh cookie)
 router.post('/users/login', validate(loginSchema), userController.login);
+
+// Refresh access token using httpOnly refresh cookie (rotates refresh token)
+router.post('/users/refresh', userController.refresh);
+
+// Logout current device (revokes cookie refresh token & clears cookie)
+router.post('/users/logout', userController.logout);
+
+// Logout from all devices (authenticated)
+router.post('/users/logout-all', verifyToken, userController.logoutAll);
 
 // Current user profile (accessible before first-login password change completes)
 router.get('/users/me', verifyToken, userController.getMe);

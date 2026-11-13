@@ -7,6 +7,7 @@ exports.initAssociations = initAssociations;
 const user_1 = __importDefault(require("./user"));
 const tasks_1 = __importDefault(require("./tasks"));
 const resetPassword_1 = __importDefault(require("./resetPassword"));
+const refreshToken_1 = __importDefault(require("./refreshToken"));
 let initialized = false;
 /** Register Sequelize model associations once across the application. */
 function initAssociations() {
@@ -22,6 +23,8 @@ function initAssociations() {
     tasks_1.default.belongsTo(user_1.default, { as: 'evaluator', foreignKey: 'evaluated_by' });
     user_1.default.hasMany(resetPassword_1.default, { as: 'passwordResets', foreignKey: 'userId' });
     resetPassword_1.default.belongsTo(user_1.default, { as: 'user', foreignKey: 'userId' });
+    user_1.default.hasMany(refreshToken_1.default, { as: 'refreshTokens', foreignKey: 'userId' });
+    refreshToken_1.default.belongsTo(user_1.default, { as: 'user', foreignKey: 'userId' });
     initialized = true;
 }
 exports.default = initAssociations;
