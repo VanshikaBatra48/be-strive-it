@@ -18,6 +18,7 @@ export const sequelize = new Sequelize(
     port: parseInt(process.env.DB_PORT || '5432', 10),
     dialect: 'postgres',
     logging: false,
+    timezone: 'Asia/Kolkata'
   }
 );
 
@@ -31,3 +32,4 @@ export async function connectDB(): Promise<void> {
     throw error;
   }
 }
+

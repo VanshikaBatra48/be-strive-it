@@ -33,7 +33,8 @@ class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare feedback: CreationOptional<string | null>;
   declare evaluated_by: CreationOptional<number | null>;
   declare evaluated_at: CreationOptional<Date | null>;
-  declare due_reminder_sent: CreationOptional<boolean>;
+  declare due_reminder_24h_sent: CreationOptional<boolean>;
+  declare due_reminder_1h_sent: CreationOptional<boolean>;
 
   // Associations
   declare mentee?: NonAttribute<User | null>;
@@ -132,11 +133,16 @@ Task.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
-    due_reminder_sent: {
-  type: DataTypes.BOOLEAN,
-  allowNull: false,
-  defaultValue: false,
-},
+    due_reminder_24h_sent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+    due_reminder_1h_sent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
     deletedAt: DataTypes.DATE,
