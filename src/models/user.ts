@@ -28,7 +28,7 @@ class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
   declare mentor?: NonAttribute<User | null>;
   declare mentees?: NonAttribute<User[]>;
 
-  // Added automatically by Sequelize because timestamps: true
+  // Timestamps
   declare readonly createdAt: CreationOptional<Date>;
   declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -105,6 +105,9 @@ User.init(
     modelName: 'User',
     tableName: 'users',
     timestamps: true,
+    defaultScope: {
+      attributes: { exclude: ['password'] },
+    },
   }
 );
 

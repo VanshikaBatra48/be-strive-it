@@ -427,8 +427,9 @@ const userController = {
   // ==========================================
   async changePassword(req: Request, res: Response): Promise<void> {
     try {
-      const { newPassword } = req.body as {
+      const { newPassword, currentPassword } = req.body as {
         newPassword?: string;
+        currentPassword?: string;
       };
 
       if (!newPassword) {
@@ -459,7 +460,7 @@ const userController = {
       }
 
       // Call service to verify and update password
-      const result = await userService.changePassword(userId, newPassword);
+      const result = await userService.changePassword(userId, newPassword, currentPassword);
 
       // Invalidate all old sessions (other devices), then issue a new one here
       await revokeAllForUser(userId);
@@ -474,6 +475,14 @@ const userController = {
       });
     } catch (error) {
       console.error('Error changing password:', error);
+
+      if (error instanceof UserServiceError) {
+        res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
 
       const message = getErrorMessage(error);
 

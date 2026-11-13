@@ -928,6 +928,9 @@ const userService = {
 
     const user = await User.findOne({
       where: { email: email.trim().toLowerCase() },
+      attributes: {
+    include: ['password'],
+    },
       include: MENTOR_PUBLIC_INCLUDE,
     });
 
@@ -988,6 +991,9 @@ const userService = {
   ) {
     const user = await User.findByPk(userId, {
       include: MENTOR_PUBLIC_INCLUDE,
+      attributes: {
+      include: ['password'],
+    },
     });
 
     if (!user) {
@@ -999,6 +1005,7 @@ const userService = {
       if (!matchesCurrent) {
         throw new UserServiceError(400, 'Current password is incorrect');
       }
+      
     }
 
     const isSamePassword = await bcrypt.compare(newPassword, user.password);

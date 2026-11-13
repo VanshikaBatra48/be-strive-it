@@ -2,6 +2,7 @@ import User from './user';
 import Task from './tasks';
 import PasswordReset from './resetPassword';
 import RefreshToken from './refreshToken';
+import { Notification } from './notification';
 
 let initialized = false;
 
@@ -25,6 +26,9 @@ export function initAssociations(): void {
 
   User.hasMany(RefreshToken, { as: 'refreshTokens', foreignKey: 'userId' });
   RefreshToken.belongsTo(User, { as: 'user', foreignKey: 'userId' });
+
+  User.hasMany(Notification, { as: 'notifications', foreignKey: 'user_id', onDelete: 'CASCADE' });
+  Notification.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
   initialized = true;
 }

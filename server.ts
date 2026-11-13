@@ -14,6 +14,7 @@ import './src/models/tasks';
 import './src/models/resetPassword';
 import './src/models/refreshToken';
 import './src/models/notification';
+import './src/models/chat';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
 
@@ -27,6 +28,7 @@ import { authenticate } from './src/middleware/authMiddleware';
 // Realtime + jobs
 import { initSocket } from './src/socket';
 import { startDueDateJob } from './src/jobs/dueDateJob';
+import chatRoutes from './src/routes/chatRoutes';
 
 initAssociations();
 
@@ -65,6 +67,7 @@ app.use('/api/notifications', authenticate, notificationRoutes);
 app.use('/api', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api', passwordResetRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health / root route
 app.get('/', (_req: Request, res: Response) => {
@@ -101,54 +104,6 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT: number = Number(process.env.PORT) || 3000;
 const TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
-// async function startServer(): Promise<Server | undefined> {
-//   try {
-//     // Schema is managed via migrations
-//     await connectDB();
-
-//     // Clean up any expired refresh tokens on startup and every 24h
-//     void deleteExpiredTokens().catch((err) => {
-//       console.error('Failed to clean expired refresh tokens:', err);
-//     });
-//     const cleanupTimer = setInterval(() => {
-//       void deleteExpiredTokens().catch((err) => {
-//         console.error('Failed to clean expired refresh tokens:', err);
-//       });
-//     }, TOKEN_CLEANUP_INTERVAL_MS);
-//     cleanupTimer.unref();
-
-//     const server = app.listen(PORT, HOST, () => {
-//     // Create the HTTP server yourself so Socket.IO can share the port
-//     const server = http.createServer(app);
-//     initSocket(server, allowedOrigins);
-
-//     server.listen(PORT, HOST, () => {
-//       console.log(`Server running at http://${HOST}:${PORT}`);
-//       console.log('Waiting for incoming requests...');
-//       startDueDateJob(); // daily due-date reminders
-//     });
-
-//     server.on('error', (error: Error) => {
-//       console.error('HTTP server error:', error);
-//     });
-
-//     server.on('close', () => {
-//       clearInterval(cleanupTimer);
-//       console.log('HTTP server has closed.');
-//     });
-
-//     return server;
-//   } 
-// }catch (error) {
-//     console.error('Unable to start server:', error);
-//     process.exitCode = 1;
-//     return undefined;
-//   }
-// }
-
-// void startServer();
-
 
 async function startServer(): Promise<Server | undefined> {
   try {

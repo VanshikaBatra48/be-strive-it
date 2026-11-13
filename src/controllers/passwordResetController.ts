@@ -83,7 +83,7 @@ export async function verifyResetOTP(req: Request, res: Response): Promise<void>
       console.error('Verify OTP error:', errorMessage);
     }
 
-    res.status(statusCode).json({ message });
+    res.status(statusCode).json({ code: errorMessage, message });
   }
 }
 
@@ -129,6 +129,7 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
 
     if (errorMessage === 'INVALID_RESET_TOKEN' || errorMessage === 'RESET_TOKEN_EXPIRED') {
       res.status(400).json({
+        code: errorMessage,
         message: 'Invalid or expired reset token. Please verify your email again.',
       });
       return;
@@ -136,16 +137,18 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
 
     if (errorMessage === 'USER_NOT_FOUND') {
       res.status(404).json({
+        code: errorMessage,
         message: 'User not found.',
       });
       return;
     }
-if (errorMessage === 'New password cannot be the same as the old password') {
-  res.status(400).json({
-    message: 'New password cannot be the same as your old password.',
-  });
-  return;
-}
+    if (errorMessage === 'New password cannot be the same as the old password') {
+      res.status(400).json({
+        code: 'SAME_PASSWORD',
+        message: 'New password cannot be the same as your old password.',
+      });
+      return;
+    }
     console.error('Password reset error:', errorMessage);
 
     res.status(500).json({
