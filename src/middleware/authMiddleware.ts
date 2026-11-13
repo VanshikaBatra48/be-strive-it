@@ -190,6 +190,16 @@ export function authorize(...roles: UserRole[]) {
     next();
   };
 }
+/**
+ * Verify a raw JWT string (used by Socket.IO). Throws if invalid or expired.
+ */
+export function verifyJwt(token: string): TokenPayload {
+  const result = jwt.verify(token, JWT_SECRET);
+  if (typeof result === 'string') {
+    throw new Error('Invalid token');
+  }
+  return result as unknown as TokenPayload;
+}
 
 // Aliases so existing code (routes, userService) keeps working unchanged
 export const generateToken = generateAccessToken;

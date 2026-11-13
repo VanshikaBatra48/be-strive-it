@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import http from 'node:http';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
@@ -12,13 +13,20 @@ import './src/models/user';
 import './src/models/tasks';
 import './src/models/resetPassword';
 import './src/models/refreshToken';
+import './src/models/notification';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
 
-// Import routes
+// Routes
 import userRoutes from './src/routes/userRoute';
 import taskRoutes from './src/routes/taskRoutes';
 import passwordResetRoutes from './src/routes/passwordResetRoutes';
+import notificationRoutes from './src/routes/notificationRoutes';
+import { authenticate } from './src/middleware/authMiddleware';
+
+// Realtime + jobs
+import { initSocket } from './src/socket';
+import { startDueDateJob } from './src/jobs/dueDateJob';
 
 initAssociations();
 
@@ -30,11 +38,7 @@ const envOrigins = (process.env.CORS_ORIGINS || '')
   .filter(Boolean);
 
 const allowedOrigins: string[] = Array.from(
-  new Set([
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    ...envOrigins,
-  ])
+  new Set(['http://localhost:5173', 'http://127.0.0.1:5173', ...envOrigins])
 );
 
 const corsOptions: CorsOptions = {
@@ -42,45 +46,34 @@ const corsOptions: CorsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-  ],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 };
 
 app.use(cors(corsOptions));
-
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cookieParser());
 
 // Register routes
+// Register routes (notifications first, so '/api' mounts can't intercept it)
+app.use('/api/notifications', authenticate, notificationRoutes);
 app.use('/api', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api', passwordResetRoutes);
 
 // Health / root route
 app.get('/', (_req: Request, res: Response) => {
-  res.json({
-    message: 'Intern Management System API is running!',
-  });
+  res.json({ message: 'Intern Management System API is running!' });
 });
 
-// 404 handler for unmatched API routes
+// 404 handler for unmatched routes
 app.use((_req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    message: 'Endpoint not found',
-  });
+  res.status(404).json({ success: false, message: 'Endpoint not found' });
 });
 
 // Global error handler
@@ -90,10 +83,10 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     typeof errObj?.statusCode === 'number'
       ? errObj.statusCode
       : typeof errObj?.status === 'number'
-        ? errObj.status
-        : errObj?.message === 'Not allowed by CORS'
-          ? 403
-          : 500;
+      ? errObj.status
+      : errObj?.message === 'Not allowed by CORS'
+      ? 403
+      : 500;
 
   if (statusCode >= 500) {
     console.error('Unhandled server error:', err);
@@ -101,10 +94,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
   res.status(statusCode).json({
     success: false,
-    message:
-      statusCode >= 500
-        ? 'Internal server error'
-        : errObj?.message || 'Request failed',
+    message: statusCode >= 500 ? 'Internal server error' : errObj?.message || 'Request failed',
   });
 });
 
@@ -112,25 +102,86 @@ const HOST = process.env.HOST || '0.0.0.0';
 const PORT: number = Number(process.env.PORT) || 3000;
 const TOKEN_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+// async function startServer(): Promise<Server | undefined> {
+//   try {
+//     // Schema is managed via migrations
+//     await connectDB();
+
+//     // Clean up any expired refresh tokens on startup and every 24h
+//     void deleteExpiredTokens().catch((err) => {
+//       console.error('Failed to clean expired refresh tokens:', err);
+//     });
+//     const cleanupTimer = setInterval(() => {
+//       void deleteExpiredTokens().catch((err) => {
+//         console.error('Failed to clean expired refresh tokens:', err);
+//       });
+//     }, TOKEN_CLEANUP_INTERVAL_MS);
+//     cleanupTimer.unref();
+
+//     const server = app.listen(PORT, HOST, () => {
+//     // Create the HTTP server yourself so Socket.IO can share the port
+//     const server = http.createServer(app);
+//     initSocket(server, allowedOrigins);
+
+//     server.listen(PORT, HOST, () => {
+//       console.log(`Server running at http://${HOST}:${PORT}`);
+//       console.log('Waiting for incoming requests...');
+//       startDueDateJob(); // daily due-date reminders
+//     });
+
+//     server.on('error', (error: Error) => {
+//       console.error('HTTP server error:', error);
+//     });
+
+//     server.on('close', () => {
+//       clearInterval(cleanupTimer);
+//       console.log('HTTP server has closed.');
+//     });
+
+//     return server;
+//   } 
+// }catch (error) {
+//     console.error('Unable to start server:', error);
+//     process.exitCode = 1;
+//     return undefined;
+//   }
+// }
+
+// void startServer();
+
+
 async function startServer(): Promise<Server | undefined> {
   try {
-    // Connect and verify PostgreSQL connection (schema is managed via migrations)
+    // Connect to PostgreSQL
     await connectDB();
 
-    // Clean up any expired refresh tokens on startup and every 24h
+    // Clean up expired refresh tokens on startup
     void deleteExpiredTokens().catch((err) => {
       console.error('Failed to clean expired refresh tokens:', err);
     });
+
+    // Schedule cleanup every 24 hours
     const cleanupTimer = setInterval(() => {
       void deleteExpiredTokens().catch((err) => {
         console.error('Failed to clean expired refresh tokens:', err);
       });
     }, TOKEN_CLEANUP_INTERVAL_MS);
+
     cleanupTimer.unref();
 
-    const server = app.listen(PORT, HOST, () => {
+    // Create one HTTP server using Express
+    const server = http.createServer(app);
+
+    // Attach Socket.IO to the same HTTP server
+    initSocket(server, allowedOrigins);
+
+    // Start the HTTP server
+    server.listen(PORT, HOST, () => {
       console.log(`Server running at http://${HOST}:${PORT}`);
       console.log('Waiting for incoming requests...');
+
+      // Start daily due-date reminders
+      startDueDateJob();
     });
 
     server.on('error', (error: Error) => {
@@ -143,6 +194,7 @@ async function startServer(): Promise<Server | undefined> {
     });
 
     return server;
+
   } catch (error) {
     console.error('Unable to start server:', error);
     process.exitCode = 1;
