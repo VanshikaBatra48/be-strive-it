@@ -1,20 +1,20 @@
-import type { Transaction } from "sequelize";
-import { Notification } from "../models/notification";
-import type { NotificationType } from "../models/notification";
-import { getIO } from "../socket";
+import type { Transaction } from 'sequelize';
+import { Notification } from '../models/notification';
+import type { NotificationType } from '../models/notification';
+import { getIO } from '../socket';
 
-/* ---------- Who receives what (documentation + runtime guard) ---------- */
+/* ---------- Who receives what ---------- */
 export const MENTEE_TYPES: NotificationType[] = [
-  "TASK_ASSIGNED",
-  "TASK_DUE_DATE",
-  "TASK_CHANGE_REQUEST",
-  "EVALUATION_SUBMITTED",
+  'TASK_ASSIGNED',
+  'TASK_DUE_DATE',
+  'TASK_CHANGE_REQUEST',
+  'EVALUATION_SUBMITTED',
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
-  "TASK_UPDATED",
-  "TASK_SUBMITTED",
-  "TASK_STATUS_CHANGED",
+  'TASK_UPDATED',
+  'TASK_SUBMITTED',
+  'TASK_STATUS_CHANGED',
 ];
 
 /* ---------- Core ---------- */
@@ -24,6 +24,11 @@ export interface NewNotification {
   title: string;
   message: string;
   data?: Record<string, unknown>;
+}
+
+interface TaskRef {
+  id: number;
+  title: string;
 }
 
 export async function createNotification(
@@ -41,38 +46,42 @@ export async function createNotification(
     try {
       getIO()
         .to(`user:${input.user_id}`)
-        .emit("notification:new", notification.toJSON());
+        .emit('notification:new', notification.toJSON());
     } catch (err) {
       // A failed push must never break the main request
-      console.error("Socket emit failed:", err);
+      console.error('Socket emit failed:', err);
     }
   };
 
-  // If inside a transaction, only push after it commits
+  // Inside a transaction, push only after it commits
   if (transaction) transaction.afterCommit(emit);
   else emit();
 
   return notification;
 }
 
-/* ---------- Mentee notifications ---------- */
-interface TaskRef {
-  id: number;
-  title: string;
+/** Run a notification without letting its failure break the caller. */
+export async function safeNotify(fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error('Notification failed:', err);
+  }
 }
 
+/* ---------- Mentee notifications ---------- */
 export const notifyTaskAssigned = (
   mentee_id: number,
   task: TaskRef,
-  mentorName: string,
+  assignerName: string,
   tx?: Transaction
 ) =>
   createNotification(
     {
       user_id: mentee_id,
-      type: "TASK_ASSIGNED",
-      title: "New task assigned",
-      message: `${mentorName} assigned you "${task.title}"`,
+      type: 'TASK_ASSIGNED',
+      title: 'New task assigned',
+      message: `${assignerName} assigned you "${task.title}"`,
       data: { taskId: task.id },
     },
     { transaction: tx }
@@ -87,10 +96,10 @@ export const notifyTaskDueDate = (
   createNotification(
     {
       user_id: mentee_id,
-      type: "TASK_DUE_DATE",
-      title: "Task due soon",
-      message: `"${task.title}" is due on ${dueDate.toDateString()}`,
-      data: { taskId: task.id, dueDate: dueDate.toISOString() },
+      type: 'TASK_DUE_DATE',
+      title: 'Task due soon',
+      message: `"${task.title}" is due on ${new Date(dueDate).toDateString()}`,
+      data: { taskId: task.id, dueDate: new Date(dueDate).toISOString() },
     },
     { transaction: tx }
   );
@@ -103,8 +112,8 @@ export const notifyTaskChangeRequest = (
   createNotification(
     {
       user_id: mentee_id,
-      type: "TASK_CHANGE_REQUEST",
-      title: "Changes requested",
+      type: 'TASK_CHANGE_REQUEST',
+      title: 'Changes requested',
       message: `Your mentor requested changes on "${task.title}"`,
       data: { taskId: task.id },
     },
@@ -113,16 +122,20 @@ export const notifyTaskChangeRequest = (
 
 export const notifyEvaluationSubmitted = (
   mentee_id: number,
-  evaluationId: number,
+  task: TaskRef,
+  score: number | null,
   tx?: Transaction
 ) =>
   createNotification(
     {
       user_id: mentee_id,
-      type: "EVALUATION_SUBMITTED",
-      title: "New evaluation",
-      message: "Your mentor submitted an evaluation for you",
-      data: { evaluationId },
+      type: 'EVALUATION_SUBMITTED',
+      title: 'Task evaluated',
+      message:
+        score !== null
+          ? `Your task "${task.title}" was evaluated. Score: ${score}/100`
+          : `Your task "${task.title}" was evaluated`,
+      data: { taskId: task.id, score },
     },
     { transaction: tx }
   );
@@ -131,15 +144,15 @@ export const notifyEvaluationSubmitted = (
 export const notifyTaskUpdated = (
   mentor_id: number,
   task: TaskRef,
-  menteeName: string,
+  actorName: string,
   tx?: Transaction
 ) =>
   createNotification(
     {
       user_id: mentor_id,
-      type: "TASK_UPDATED",
-      title: "Task updated",
-      message: `${menteeName} updated "${task.title}"`,
+      type: 'TASK_UPDATED',
+      title: 'Task updated',
+      message: `${actorName} updated "${task.title}"`,
       data: { taskId: task.id },
     },
     { transaction: tx }
@@ -154,8 +167,8 @@ export const notifyTaskSubmitted = (
   createNotification(
     {
       user_id: mentor_id,
-      type: "TASK_SUBMITTED",
-      title: "Task submitted",
+      type: 'TASK_SUBMITTED',
+      title: 'Task submitted',
       message: `${menteeName} submitted "${task.title}" for review`,
       data: { taskId: task.id },
     },
@@ -172,8 +185,8 @@ export const notifyTaskStatusChanged = (
   createNotification(
     {
       user_id: mentor_id,
-      type: "TASK_STATUS_CHANGED",
-      title: "Task status changed",
+      type: 'TASK_STATUS_CHANGED',
+      title: 'Task status changed',
       message: `${menteeName} moved "${task.title}" to ${status}`,
       data: { taskId: task.id, status },
     },
@@ -184,7 +197,7 @@ export const notifyTaskStatusChanged = (
 export const listNotifications = (user_id: number, limit: number, offset: number) =>
   Notification.findAll({
     where: { user_id },
-    order: [["created_at", "DESC"]],
+    order: [['created_at', 'DESC']],
     limit,
     offset,
   });
@@ -195,9 +208,9 @@ export const getUnreadCount = (user_id: number) =>
 export async function markRead(user_id: number, id: number) {
   const [affected] = await Notification.update(
     { is_read: true },
-    { where: { id, user_id } } // user_id check stops access to other users' rows
+    { where: { id, user_id } }
   );
-  return affected; // 0 means not found or not yours
+  return affected;
 }
 
 export async function markAllRead(user_id: number) {

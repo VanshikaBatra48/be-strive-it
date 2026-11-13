@@ -30,7 +30,10 @@ export async function sendLoginCredentials(
   user: EmailRecipient,
   temporaryPassword: string
 ): Promise<void> {
-  const loginLink = `${process.env.FRONTEND_URL}/`;
+  const frontendBase = (
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ).replace(/\/+$/, '');
+  const loginLink = `${frontendBase}/`;
 
   await transporter.sendMail({
     from: `"Intern Management System" <${process.env.EMAIL_USER}>`,

@@ -13,7 +13,7 @@ module.exports = {
   async down (queryInterface, Sequelize) {
      await queryInterface.renameColumn(
       'users',
-      'assignedMentee',
+      'assignedMentees',
       'assigned_mentees'
     );
   }

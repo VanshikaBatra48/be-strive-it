@@ -5,8 +5,11 @@ import 'dotenv/config';
 import User from '../models/user';
 import type { UserRole } from '../models/user';
 
-const JWT_SECRET: string =
-  process.env.JWT_SECRET || 'default_jwt_secret_key_change_in_production';
+const jwtSecretEnv = process.env.JWT_SECRET?.trim();
+if (!jwtSecretEnv) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
+}
+const JWT_SECRET: string = jwtSecretEnv;
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '24h';
 
 export interface TokenPayload {
@@ -77,7 +80,7 @@ export async function verifyToken(
     try {
       const result = jwt.verify(token, JWT_SECRET);
       if (typeof result === 'string') {
-        res.status(403).json({
+        res.status(401).json({
           success: false,
           message: 'Invalid token. Authentication failed.',
         });
@@ -93,22 +96,30 @@ export async function verifyToken(
         return;
       }
 
-      res.status(403).json({
+      res.status(401).json({
         success: false,
         message: 'Invalid token. Authentication failed.',
       });
       return;
     }
 
-    // Verify user still exists in database
+    // Verify user still exists in database and is active
     const user = await User.findByPk(decoded.id, {
       attributes: { exclude: ['password'] },
     });
 
     if (!user) {
-      res.status(404).json({
+      res.status(401).json({
         success: false,
         message: 'User associated with this token no longer exists.',
+      });
+      return;
+    }
+
+    if (user.status !== 'active') {
+      res.status(401).json({
+        success: false,
+        message: 'Account is deactivated. Please contact an administrator.',
       });
       return;
     }
@@ -121,6 +132,13 @@ export async function verifyToken(
       role: user.role,
       status: user.status,
       firstLogin: user.firstLogin,
+      mentor_id: user.mentor_id ?? null,
+      assigned_to: user.assigned_to ?? null,
+      assignedMentees: Array.isArray(user.assignedMentees)
+        ? user.assignedMentees
+            .map(Number)
+            .filter((id) => Number.isInteger(id) && id > 0)
+        : [],
     };
     req.currentUser = user;
 
