@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as chat from '../service/chatService';
 import { ChatError } from '../service/chatService';
 
+
 // ---------- Validation ----------
 const idSchema = z.coerce.number().int().positive();
 
@@ -105,6 +106,7 @@ const chatController = {
         files,
       });
       res.status(201).json({ success: true, data });
+      
     } catch (err) {
       await chat.cleanupUploadedFiles(files); // don't leave orphan files if the message failed
       throw err;
@@ -125,6 +127,8 @@ const chatController = {
     await chat.markRead(actorOf(req), idSchema.parse(req.params.groupId), messageId);
     res.json({ success: true });
   }),
+
+
 
   /** Files are only reachable through this authenticated route. */
   downloadAttachment: wrap(async (req, res) => {

@@ -11,7 +11,7 @@ import {
   removeUserFromGroupRoom,
   disconnectUser,
 } from '../socket';
-
+import {notifyNewMessage, safeNotify} from "../service/notificationService";
 // ---------- Config ----------
 export const MIN_GROUP_MEMBERS = 3; // creator + at least 2 others => no one-to-one chats
 export const MAX_BODY_LENGTH = 2000;
@@ -421,11 +421,15 @@ export async function sendMessage(
   groupId: number,
   input: { body?: string; files?: UploadedFile[] }
 ) {
+  //Check whether the sender is allowed to post
+  const group = await assertCanPost(actor, groupId);
+
   await assertCanPost(actor, groupId);
 
   const body = (input.body ?? '').trim();
   const files = input.files ?? [];
   if (!body && files.length === 0) throw new ChatError('Message cannot be empty');
+
   if (body.length > MAX_BODY_LENGTH) {
     throw new ChatError(`Message is too long (max ${MAX_BODY_LENGTH} characters)`);
   }
@@ -456,9 +460,42 @@ export async function sendMessage(
 
   const payload = serializeMessage(message, attachments);
   emitToGroup(groupId, 'message:new', payload);
-  return payload;
-}
+   //  Get all active members of this group
+  const groupMembers = await ChatMember.findAll({
+    where: {
+      groupId,
+      leftAt: null,
+    },
+  });
 
+  // Prepare a short message preview for the notification
+  const messagePreview = body
+    ? body.slice(0, 150)
+    : 'Sent an attachment';
+
+  //Notify every group member except the sender
+  await Promise.all(
+    groupMembers
+      .filter((member) => member.userId !== actor.id)
+      .map((member) =>
+        safeNotify(() =>
+          notifyNewMessage(
+            member.userId,       // Notification recipient
+            groupId,             // Group ID
+            group.name,          // Group name
+            actor.id,            // Sender ID
+            actor.name,          // Sender name
+            message.id,          // Message ID
+            messagePreview       // Message preview
+          )
+        )
+      )
+  );
+
+  // Return the message to the controller
+  return payload;
+
+}
 /**
  * Soft delete: row stays (so history order/"message deleted" placeholder is kept),
  * but the text is erased and attached files are removed from disk.

@@ -9,12 +9,14 @@ export const MENTEE_TYPES: NotificationType[] = [
   'TASK_DUE_DATE',
   'TASK_CHANGE_REQUEST',
   'EVALUATION_SUBMITTED',
+  'NEW_MESSAGE'
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
   'TASK_UPDATED',
   'TASK_SUBMITTED',
   'TASK_STATUS_CHANGED',
+  'NEW_MESSAGE'
 ];
 
 /* ---------- Core ---------- */
@@ -156,6 +158,7 @@ export const notifyEvaluationSubmitted = (
     { transaction: tx }
   );
 
+  
 /* ---------- Mentor notifications ---------- */
 export const notifyTaskUpdated = (
   mentor_id: number,
@@ -236,3 +239,32 @@ export async function markAllRead(user_id: number) {
   );
   return affected;
 }
+
+
+/*---------------Notification that is same in both--------------------------------*/
+export const notifyNewMessage = (
+  recipientId: number,
+  groupId: number,
+  groupName: string,
+  senderId: number,
+  senderName: string,
+  messageId: number,
+  message: string,
+  tx?: Transaction
+) =>
+  createNotification(
+    {
+      user_id: recipientId,
+      type: 'NEW_MESSAGE',
+      title: `New message in ${groupName}`,
+       message: `${senderName}: ${message}`,
+    data: {
+      groupId,
+      groupName,
+      senderId,
+      senderName,
+      messageId,
+    },
+    },
+    { transaction: tx }
+  );
