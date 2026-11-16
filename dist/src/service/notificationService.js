@@ -58,12 +58,23 @@ const notifyTaskAssigned = (mentee_id, task, assignerName, tx) => createNotifica
     data: { taskId: task.id },
 }, { transaction: tx });
 exports.notifyTaskAssigned = notifyTaskAssigned;
-const notifyTaskDueDate = (mentee_id, task, dueDate, tx) => createNotification({
+function formatDueDate(date) {
+    return new Date(date).toLocaleString('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata',
+    });
+}
+const notifyTaskDueDate = (mentee_id, task, dueDate, kind = '24h', tx) => createNotification({
     user_id: mentee_id,
     type: 'TASK_DUE_DATE',
-    title: 'Task due soon',
-    message: `"${task.title}" is due on ${new Date(dueDate).toDateString()}`,
-    data: { taskId: task.id, dueDate: new Date(dueDate).toISOString() },
+    title: kind === '1h' ? 'Task due within 1 hour' : 'Task due within 24 hours',
+    message: `"${task.title}" is due on ${formatDueDate(dueDate)}`,
+    data: {
+        taskId: task.id,
+        dueDate: new Date(dueDate).toISOString(),
+        reminder: kind,
+    },
 }, { transaction: tx });
 exports.notifyTaskDueDate = notifyTaskDueDate;
 const notifyTaskChangeRequest = (mentee_id, task, tx) => createNotification({

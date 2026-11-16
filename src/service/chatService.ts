@@ -13,7 +13,7 @@ import {
 } from '../socket';
 
 // ---------- Config ----------
-export const MIN_GROUP_MEMBERS = 3; // creator + at least 2 others => no one-to-one chats
+export const MIN_GROUP_MEMBERS = 2; // creator + at least 1 other 
 export const MAX_BODY_LENGTH = 2000;
 export const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'chat'); // NOT served statically
 
@@ -199,7 +199,7 @@ export async function createGroup(
   const memberIds = [...new Set(input.memberIds)].filter((id) => id !== actor.id);
   if (memberIds.length + 1 < MIN_GROUP_MEMBERS) {
     throw new ChatError(
-      `A group needs at least ${MIN_GROUP_MEMBERS} members including you. One-to-one chats are not supported.`
+      `A group needs at least ${MIN_GROUP_MEMBERS} members including you.`
     );
   }
   await assertCanAdd(actor, memberIds);
@@ -486,13 +486,14 @@ export async function deleteMessage(actor: Actor, groupId: number, messageId: nu
   const attachments = await ChatAttachment.findAll({ where: { messageId: message.id } });
   const now = new Date();
   await sequelize.transaction(async (t) => {
-    await message.update({ deletedAt: now, deletedBy: actor.id, body: null }, { transaction: t });
+    // Keep 'body' intact in the database; only record deletedAt and deletedBy
+    await message.update({ deletedAt: now, deletedBy: actor.id }, { transaction: t });
+    // Keep 'originalName' intact in the database; only record deletedAt
     await ChatAttachment.update(
-      { deletedAt: now, originalName: null },
+      { deletedAt: now },
       { where: { messageId: message.id }, transaction: t }
     );
   });
-  await Promise.all(attachments.map((a) => removeFile(a.storedName)));
 
   emitToGroup(groupId, 'message:deleted', { groupId, messageId: message.id });
   return { id: message.id, groupId, deleted: true };

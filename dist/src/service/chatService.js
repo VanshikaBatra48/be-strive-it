@@ -32,7 +32,7 @@ const user_1 = __importDefault(require("../models/user"));
 const chat_1 = require("../models/chat");
 const socket_1 = require("../socket");
 // ---------- Config ----------
-exports.MIN_GROUP_MEMBERS = 3; // creator + at least 2 others => no one-to-one chats
+exports.MIN_GROUP_MEMBERS = 2; // creator + at least 1 other 
 exports.MAX_BODY_LENGTH = 2000;
 exports.UPLOAD_DIR = path_1.default.join(process.cwd(), 'uploads', 'chat'); // NOT served statically
 // ---------- Types ----------
@@ -189,7 +189,7 @@ async function createGroup(actor, input) {
     }
     const memberIds = [...new Set(input.memberIds)].filter((id) => id !== actor.id);
     if (memberIds.length + 1 < exports.MIN_GROUP_MEMBERS) {
-        throw new ChatError(`A group needs at least ${exports.MIN_GROUP_MEMBERS} members including you. One-to-one chats are not supported.`);
+        throw new ChatError(`A group needs at least ${exports.MIN_GROUP_MEMBERS} members including you.`);
     }
     await assertCanAdd(actor, memberIds);
     const group = await database_1.sequelize.transaction(async (t) => {
@@ -426,10 +426,11 @@ async function deleteMessage(actor, groupId, messageId) {
     const attachments = await chat_1.ChatAttachment.findAll({ where: { messageId: message.id } });
     const now = new Date();
     await database_1.sequelize.transaction(async (t) => {
-        await message.update({ deletedAt: now, deletedBy: actor.id, body: null }, { transaction: t });
-        await chat_1.ChatAttachment.update({ deletedAt: now, originalName: null }, { where: { messageId: message.id }, transaction: t });
+        // Keep 'body' intact in the database; only record deletedAt and deletedBy
+        await message.update({ deletedAt: now, deletedBy: actor.id }, { transaction: t });
+        // Keep 'originalName' intact in the database; only record deletedAt
+        await chat_1.ChatAttachment.update({ deletedAt: now }, { where: { messageId: message.id }, transaction: t });
     });
-    await Promise.all(attachments.map((a) => removeFile(a.storedName)));
     (0, socket_1.emitToGroup)(groupId, 'message:deleted', { groupId, messageId: message.id });
     return { id: message.id, groupId, deleted: true };
 }

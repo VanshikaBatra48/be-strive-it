@@ -16,6 +16,7 @@ exports.sequelize = new sequelize_1.Sequelize(requireEnv('DB_NAME'), requireEnv(
     port: parseInt(process.env.DB_PORT || '5432', 10),
     dialect: 'postgres',
     logging: false,
+    timezone: 'Asia/Kolkata'
 });
 async function connectDB() {
     try {

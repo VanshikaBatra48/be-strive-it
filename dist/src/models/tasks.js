@@ -89,7 +89,12 @@ Task.init({
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
     },
-    due_reminder_sent: {
+    due_reminder_24h_sent: {
+        type: sequelize_1.DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    },
+    due_reminder_1h_sent: {
         type: sequelize_1.DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
