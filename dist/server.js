@@ -15,6 +15,7 @@ require("./src/models/resetPassword");
 require("./src/models/refreshToken");
 require("./src/models/notification");
 require("./src/models/chat");
+require("./src/models/taskTimeLog");
 const associations_1 = require("./src/models/associations");
 const tokenService_1 = require("./src/service/tokenService");
 // Routes
@@ -27,6 +28,7 @@ const authMiddleware_1 = require("./src/middleware/authMiddleware");
 const socket_1 = require("./src/socket");
 const dueDateJob_1 = require("./src/jobs/dueDateJob");
 const chatRoutes_1 = __importDefault(require("./src/routes/chatRoutes"));
+const closeStaleTimers_1 = require("./src/jobs/closeStaleTimers");
 (0, associations_1.initAssociations)();
 const app = (0, express_1.default)();
 const envOrigins = (process.env.CORS_ORIGINS || '')
@@ -89,6 +91,7 @@ async function startServer() {
     try {
         // Connect to PostgreSQL
         await (0, database_1.connectDB)();
+        (0, closeStaleTimers_1.startStaleTimerJob)();
         // Clean up expired refresh tokens on startup
         void (0, tokenService_1.deleteExpiredTokens)().catch((err) => {
             console.error('Failed to clean expired refresh tokens:', err);

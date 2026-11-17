@@ -10,8 +10,14 @@ import {
   addUserToGroupRoom,
   removeUserFromGroupRoom,
   disconnectUser,
+  getUsersViewingGroup,
 } from '../socket';
-import {notifyNewMessage, safeNotify} from "../service/notificationService";
+
+import {
+  notifyNewMessage, 
+  safeNotify,
+  notifyGroupCreated,
+  notifyMemberAddedToGroup,} from "../service/notificationService";
 // ---------- Config ----------
 export const MIN_GROUP_MEMBERS = 2; // creator + at least 1 other 
 export const MAX_BODY_LENGTH = 2000;
@@ -226,12 +232,26 @@ export async function createGroup(
   });
 
   for (const id of [actor.id, ...memberIds]) {
-    addUserToGroupRoom(id, group.id);
-    emitToUser(id, 'group:changed', { groupId: group.id });
-  }
-  await announce(group.id, `${actor.name} created the group`);
+  addUserToGroupRoom(id, group.id);
+  emitToUser(id, 'group:changed', { groupId: group.id });
+}
 
-  return getGroupDetail(actor, group.id);
+// Send notification only to newly added members
+await Promise.all(
+  memberIds.map((userId) =>
+    safeNotify(() =>
+      notifyGroupCreated(
+        userId,
+        group.id,
+        group.name
+      )
+    )
+  )
+);
+
+await announce(group.id, `${actor.name} created the group`);
+
+return getGroupDetail(actor, group.id);
 }
 
 /** Groups the actor is an active member of, with last message + unread count. */
@@ -328,27 +348,55 @@ export async function getGroupDetail(actor: Actor, groupId: number) {
     })),
   };
 }
-
-export async function addMembers(actor: Actor, groupId: number, userIds: number[]) {
+export async function addMembers(
+  actor: Actor,
+  groupId: number,
+  userIds: number[]
+) {
   const { group } = await requireManager(actor, groupId);
-  if (group.status !== 'active') throw new ChatError('This group is archived', 409);
+
+  if (group.status !== 'active') {
+    throw new ChatError('This group is archived', 409);
+  }
 
   const ids = [...new Set(userIds)];
+
   await assertCanAdd(actor, ids);
 
   const added: number[] = [];
+
   for (const id of ids) {
-    if (await upsertMember(groupId, id)) added.push(id);
+    if (await upsertMember(groupId, id)) {
+      added.push(id);
+    }
   }
 
   if (added.length) {
     const names = await userNames(added);
+
     emitToGroup(groupId, 'group:changed', { groupId });
+
+    // Notify only newly added members
+    await Promise.all(
+      added.map((userId) =>
+        safeNotify(() =>
+          notifyMemberAddedToGroup(
+            userId,
+            groupId,
+            group.name
+          )
+        )
+      )
+    );
+
     await announce(
       groupId,
-      `${actor.name} added ${added.map((id) => names.get(id) ?? 'a user').join(', ')}`
+      `${actor.name} added ${added
+        .map((id) => names.get(id) ?? 'a user')
+        .join(', ')}`
     );
   }
+
   return getGroupDetail(actor, groupId);
 }
 
@@ -384,6 +432,58 @@ export async function archiveGroup(actor: Actor, groupId: number) {
   await group.update({ status: 'archived' });
   emitToGroup(groupId, 'group:changed', { groupId });
   return getGroupDetail(actor, groupId);
+}
+
+export async function renameGroup(actor: Actor, groupId: number, newName: string) {
+  const { group } = await requireManager(actor, groupId);
+  if (group.status !== 'active') {
+    throw new ChatError('Archived groups cannot be renamed', 409);
+  }
+  const trimmedName = newName.trim();
+  if (trimmedName.length < 2 || trimmedName.length > 120) {
+    throw new ChatError('Group name must be between 2 and 120 characters');
+  }
+  const oldName = group.name;
+  await group.update({ name: trimmedName });
+  // Post system announcement
+  await announce(groupId, `${actor.name} renamed the group to "${trimmedName}"`);
+  // Notify all members via Socket.IO
+  emitToGroup(groupId, 'group:changed', { groupId });
+  return getGroupDetail(actor, groupId);
+}
+/**
+ * Permanently deletes a group and its files.
+ * Allowed: Admin or Group Owner.
+ */
+export async function deleteGroup(actor: Actor, groupId: number) {
+  const { group } = await requireManager(actor, groupId);
+  // 1. Gather all file attachments on disk before DB cascade deletion
+  const messages = await ChatMessage.findAll({
+    where: { groupId },
+    attributes: ['id'],
+  });
+  const messageIds = messages.map((m) => m.id);
+  if (messageIds.length > 0) {
+    const attachments = await ChatAttachment.findAll({
+      where: { messageId: { [Op.in]: messageIds } },
+    });
+    await Promise.all(
+      attachments.map((att) =>
+        fs.unlink(path.join(UPLOAD_DIR, path.basename(att.storedName))).catch(() => undefined)
+      )
+    );
+  }
+  // 2. Fetch all members to update sockets and notify them
+  const members = await ChatMember.findAll({ where: { groupId } });
+  // 3. Emit deletion notification to everyone in the group
+  emitToGroup(groupId, 'group:changed', { groupId, deleted: true });
+  for (const m of members) {
+    emitToUser(m.userId, 'group:changed', { groupId, deleted: true });
+    removeUserFromGroupRoom(m.userId, groupId);
+  }
+  // 4. Destroy group row (DB CASCADE handles chat_members, chat_messages, chat_attachments)
+  await group.destroy();
+  return { id: groupId, deleted: true };
 }
 
 // ==========================================================
@@ -468,34 +568,42 @@ export async function sendMessage(
     },
   });
 
-  // Prepare a short message preview for the notification
-  const messagePreview = body
-    ? body.slice(0, 150)
-    : 'Sent an attachment';
+// Get users who are currently viewing this group
+const viewingUserIds = await getUsersViewingGroup(groupId);
 
-  //Notify every group member except the sender
-  await Promise.all(
-    groupMembers
-      .filter((member) => member.userId !== actor.id)
-      .map((member) =>
-        safeNotify(() =>
-          notifyNewMessage(
-            member.userId,       // Notification recipient
-            groupId,             // Group ID
-            group.name,          // Group name
-            actor.id,            // Sender ID
-            actor.name,          // Sender name
-            message.id,          // Message ID
-            messagePreview       // Message preview
-          )
+// Prepare message preview
+const messagePreview = body
+  ? body.slice(0, 20) + "......"
+  : 'Sent an attachment';
+
+// Notify only members who are NOT currently viewing this group
+await Promise.all(
+  groupMembers
+    .filter(
+      (member) =>
+        member.userId !== actor.id &&
+        !viewingUserIds.has(member.userId)
+    )
+    .map((member) =>
+      safeNotify(() =>
+        notifyNewMessage(
+          member.userId,
+          groupId,
+          group.name,
+          actor.id,
+          actor.name,
+          message.id,
+          messagePreview
         )
       )
-  );
+    )
+);
 
   // Return the message to the controller
   return payload;
 
 }
+
 /**
  * Soft delete: row stays (so history order/"message deleted" placeholder is kept),
  * but the text is erased and attached files are removed from disk.

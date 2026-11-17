@@ -47,6 +47,11 @@ User.init({
         type: sequelize_1.DataTypes.STRING,
         allowNull: false,
     },
+    on_Board: {
+        type: sequelize_1.DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    },
     role: {
         type: sequelize_1.DataTypes.ENUM('admin', 'mentee', 'mentor'),
         allowNull: false,

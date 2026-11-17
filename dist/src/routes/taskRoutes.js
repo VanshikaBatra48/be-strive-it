@@ -6,6 +6,7 @@ const firstLoginCheckMiddleware_1 = require("../middleware/firstLoginCheckMiddle
 const validate_1 = require("../middleware/validate");
 const taskSchema_1 = require("../schemas/taskSchema");
 const taskController_1 = require("../controllers/taskController");
+const timeLogController_1 = require("../controllers/timeLogController");
 const router = (0, express_1.Router)();
 // All task routes require authentication and completed first login
 router.use(authMiddleware_1.verifyToken, firstLoginCheckMiddleware_1.checkFirstLogin);
@@ -19,6 +20,11 @@ router.get('/:id', (0, validate_1.validate)(taskSchema_1.taskIdParamSchema), tas
 router.patch('/:id', (0, authMiddleware_1.authorize)('admin', 'mentor'), (0, validate_1.validate)(taskSchema_1.updateTaskSchema), taskController_1.updateTaskController);
 // Update task status (Assigned Mentee, Admin & owning Mentor)
 router.patch('/:id/status', (0, authMiddleware_1.authorize)('admin', 'mentor', 'mentee'), (0, validate_1.validate)(taskSchema_1.updateTaskStatusSchema), taskController_1.updateTaskStatusController);
+// Time tracking
+router.get('/time/active', (0, authMiddleware_1.authorize)('mentee'), timeLogController_1.getActiveTimerController);
+router.post('/:id/time/start', (0, authMiddleware_1.authorize)('mentee'), (0, validate_1.validate)(taskSchema_1.taskIdParamSchema), timeLogController_1.startTimerController);
+router.post('/:id/time/stop', (0, authMiddleware_1.authorize)('mentee'), (0, validate_1.validate)(taskSchema_1.taskIdParamSchema), timeLogController_1.stopTimerController);
+router.get('/:id/time', (0, authMiddleware_1.authorize)('admin', 'mentor', 'mentee'), (0, validate_1.validate)(taskSchema_1.taskIdParamSchema), timeLogController_1.getTaskTimeController);
 // Submit task work (Assigned Mentee only)
 router.patch('/:id/submit', (0, authMiddleware_1.authorize)('mentee'), (0, validate_1.validate)(taskSchema_1.submitTaskSchema), taskController_1.submitTaskController);
 // Evaluate task submission (Admin & owning Mentor only)

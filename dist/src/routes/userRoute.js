@@ -21,7 +21,12 @@ router.post('/users/logout-all', authMiddleware_1.verifyToken, userController_1.
 // Current user profile (accessible before first-login password change completes)
 router.get('/users/me', authMiddleware_1.verifyToken, userController_1.default.getMe);
 // Complete first login (authenticated user themselves or admin)
-router.patch('/users/:id/complete-first-login', authMiddleware_1.verifyToken, (0, validate_1.validate)(userSchema_1.getUserSchema), userController_1.default.completeFirstLogin);
+// router.patch(
+//   '/users/:id/complete-first-login',
+//   verifyToken,
+//   validate(getUserSchema),
+//   userController.completeFirstLogin
+// );
 // Change password (accessible before first-login gate completes)
 router.patch('/users/changepassword', authMiddleware_1.verifyToken, (0, validate_1.validate)(userSchema_1.changePasswordSchema), userController_1.default.changePassword);
 // Create a user (Admin only)

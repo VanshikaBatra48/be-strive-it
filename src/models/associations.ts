@@ -3,6 +3,7 @@ import Task from './tasks';
 import PasswordReset from './resetPassword';
 import RefreshToken from './refreshToken';
 import { Notification } from './notification';
+import TaskTimeLog from './taskTimeLog';
 
 let initialized = false;
 
@@ -29,6 +30,11 @@ export function initAssociations(): void {
 
   User.hasMany(Notification, { as: 'notifications', foreignKey: 'user_id', onDelete: 'CASCADE' });
   Notification.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
+
+  Task.hasMany(TaskTimeLog, { foreignKey: 'task_id', as: 'timeLogs' });
+  TaskTimeLog.belongsTo(Task, { foreignKey: 'task_id', as: 'task' });
+  User.hasMany(TaskTimeLog, { foreignKey: 'user_id', as: 'timeLogs' });
+  TaskTimeLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
   initialized = true;
 }

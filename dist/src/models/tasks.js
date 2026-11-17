@@ -49,7 +49,7 @@ Task.init({
         allowNull: false,
     },
     status: {
-        type: sequelize_1.DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold'),
+        type: sequelize_1.DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold', 'blocker'),
         allowNull: false,
         defaultValue: 'in-progress',
     },
@@ -68,6 +68,11 @@ Task.init({
     submitted_at: {
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
+    },
+    actual_seconds: {
+        type: sequelize_1.DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
     },
     score: {
         type: sequelize_1.DataTypes.INTEGER,

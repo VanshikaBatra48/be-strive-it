@@ -13,6 +13,8 @@ exports.getGroupDetail = getGroupDetail;
 exports.addMembers = addMembers;
 exports.removeMember = removeMember;
 exports.archiveGroup = archiveGroup;
+exports.renameGroup = renameGroup;
+exports.deleteGroup = deleteGroup;
 exports.getMessages = getMessages;
 exports.assertCanPost = assertCanPost;
 exports.sendMessage = sendMessage;
@@ -211,6 +213,8 @@ async function createGroup(actor, input) {
         (0, socket_1.addUserToGroupRoom)(id, group.id);
         (0, socket_1.emitToUser)(id, 'group:changed', { groupId: group.id });
     }
+    // Send notification only to newly added members
+    await Promise.all(memberIds.map((userId) => (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyGroupCreated)(userId, group.id, group.name))));
     await announce(group.id, `${actor.name} created the group`);
     return getGroupDetail(actor, group.id);
 }
@@ -299,19 +303,25 @@ async function getGroupDetail(actor, groupId) {
 }
 async function addMembers(actor, groupId, userIds) {
     const { group } = await requireManager(actor, groupId);
-    if (group.status !== 'active')
+    if (group.status !== 'active') {
         throw new ChatError('This group is archived', 409);
+    }
     const ids = [...new Set(userIds)];
     await assertCanAdd(actor, ids);
     const added = [];
     for (const id of ids) {
-        if (await upsertMember(groupId, id))
+        if (await upsertMember(groupId, id)) {
             added.push(id);
+        }
     }
     if (added.length) {
         const names = await userNames(added);
         (0, socket_1.emitToGroup)(groupId, 'group:changed', { groupId });
-        await announce(groupId, `${actor.name} added ${added.map((id) => names.get(id) ?? 'a user').join(', ')}`);
+        // Notify only newly added members
+        await Promise.all(added.map((userId) => (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyMemberAddedToGroup)(userId, groupId, group.name))));
+        await announce(groupId, `${actor.name} added ${added
+            .map((id) => names.get(id) ?? 'a user')
+            .join(', ')}`);
     }
     return getGroupDetail(actor, groupId);
 }
@@ -343,6 +353,53 @@ async function archiveGroup(actor, groupId) {
     await group.update({ status: 'archived' });
     (0, socket_1.emitToGroup)(groupId, 'group:changed', { groupId });
     return getGroupDetail(actor, groupId);
+}
+async function renameGroup(actor, groupId, newName) {
+    const { group } = await requireManager(actor, groupId);
+    if (group.status !== 'active') {
+        throw new ChatError('Archived groups cannot be renamed', 409);
+    }
+    const trimmedName = newName.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 120) {
+        throw new ChatError('Group name must be between 2 and 120 characters');
+    }
+    const oldName = group.name;
+    await group.update({ name: trimmedName });
+    // Post system announcement
+    await announce(groupId, `${actor.name} renamed the group to "${trimmedName}"`);
+    // Notify all members via Socket.IO
+    (0, socket_1.emitToGroup)(groupId, 'group:changed', { groupId });
+    return getGroupDetail(actor, groupId);
+}
+/**
+ * Permanently deletes a group and its files.
+ * Allowed: Admin or Group Owner.
+ */
+async function deleteGroup(actor, groupId) {
+    const { group } = await requireManager(actor, groupId);
+    // 1. Gather all file attachments on disk before DB cascade deletion
+    const messages = await chat_1.ChatMessage.findAll({
+        where: { groupId },
+        attributes: ['id'],
+    });
+    const messageIds = messages.map((m) => m.id);
+    if (messageIds.length > 0) {
+        const attachments = await chat_1.ChatAttachment.findAll({
+            where: { messageId: { [sequelize_1.Op.in]: messageIds } },
+        });
+        await Promise.all(attachments.map((att) => promises_1.default.unlink(path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(att.storedName))).catch(() => undefined)));
+    }
+    // 2. Fetch all members to update sockets and notify them
+    const members = await chat_1.ChatMember.findAll({ where: { groupId } });
+    // 3. Emit deletion notification to everyone in the group
+    (0, socket_1.emitToGroup)(groupId, 'group:changed', { groupId, deleted: true });
+    for (const m of members) {
+        (0, socket_1.emitToUser)(m.userId, 'group:changed', { groupId, deleted: true });
+        (0, socket_1.removeUserFromGroupRoom)(m.userId, groupId);
+    }
+    // 4. Destroy group row (DB CASCADE handles chat_members, chat_messages, chat_attachments)
+    await group.destroy();
+    return { id: groupId, deleted: true };
 }
 // ==========================================================
 // Messages
@@ -403,21 +460,17 @@ async function sendMessage(actor, groupId, input) {
             leftAt: null,
         },
     });
-    // Prepare a short message preview for the notification
+    // Get users who are currently viewing this group
+    const viewingUserIds = await (0, socket_1.getUsersViewingGroup)(groupId);
+    // Prepare message preview
     const messagePreview = body
-        ? body.slice(0, 150)
+        ? body.slice(0, 20) + "......"
         : 'Sent an attachment';
-    //Notify every group member except the sender
+    // Notify only members who are NOT currently viewing this group
     await Promise.all(groupMembers
-        .filter((member) => member.userId !== actor.id)
-        .map((member) => (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyNewMessage)(member.userId, // Notification recipient
-    groupId, // Group ID
-    group.name, // Group name
-    actor.id, // Sender ID
-    actor.name, // Sender name
-    message.id, // Message ID
-    messagePreview // Message preview
-    ))));
+        .filter((member) => member.userId !== actor.id &&
+        !viewingUserIds.has(member.userId))
+        .map((member) => (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyNewMessage)(member.userId, groupId, group.name, actor.id, actor.name, message.id, messagePreview))));
     // Return the message to the controller
     return payload;
 }

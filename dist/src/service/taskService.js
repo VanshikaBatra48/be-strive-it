@@ -10,6 +10,7 @@ const user_1 = __importDefault(require("../models/user"));
 const associations_1 = require("../models/associations");
 const notificationService_1 = require("../service/notificationService");
 const chatService_1 = require("../service/chatService");
+const timeLogService_1 = require("./timeLogService");
 // Ensure Sequelize associations are registered before any included queries
 (0, associations_1.initAssociations)();
 class ServiceError extends Error {
@@ -259,6 +260,8 @@ const submitTask = async (id, input, actor) => {
         submitted_at: new Date(),
         status: 'submitted',
     });
+    // Automatically close any running timer on this task
+    await (0, timeLogService_1.closeActiveLogForTask)(task.id);
     // Mentor gets TASK_SUBMITTED notification
     await (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyTaskSubmitted)(task.assigned_by, task, actor.name));
     const hydrated = await fetchHydratedTask(task.id);
@@ -324,6 +327,9 @@ const updateTaskStatus = async (id, status, actor) => {
     }
     const previousStatus = task.status;
     await task.update({ status });
+    if (status === 'hold') {
+        await (0, timeLogService_1.closeActiveLogForTask)(task.id);
+    }
     if (actor.role === 'mentee' && previousStatus !== status) {
         await (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyTaskStatusChanged)(task.assigned_by, task, actor.name, status));
     }

@@ -38,6 +38,9 @@ const chat = __importStar(require("../service/chatService"));
 const chatService_1 = require("../service/chatService");
 // ---------- Validation ----------
 const idSchema = zod_1.z.coerce.number().int().positive();
+const renameGroupBody = zod_1.z.object({
+    name: zod_1.z.string().trim().min(2, 'Group name is too short').max(120),
+});
 const createGroupBody = zod_1.z.object({
     name: zod_1.z.string().trim().min(2, 'Group name is too short').max(120),
     description: zod_1.z.string().trim().max(500).optional().nullable(),
@@ -90,6 +93,15 @@ const chatController = {
         const body = createGroupBody.parse(req.body);
         const data = await chat.createGroup(actorOf(req), body);
         res.status(201).json({ success: true, data });
+    }),
+    renameGroup: wrap(async (req, res) => {
+        const { name } = renameGroupBody.parse(req.body);
+        const data = await chat.renameGroup(actorOf(req), idSchema.parse(req.params.groupId), name);
+        res.json({ success: true, data });
+    }),
+    deleteGroup: wrap(async (req, res) => {
+        const data = await chat.deleteGroup(actorOf(req), idSchema.parse(req.params.groupId));
+        res.json({ success: true, message: 'Group deleted successfully', data });
     }),
     addMembers: wrap(async (req, res) => {
         const { userIds } = memberIdsBody.parse(req.body);

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyNewMessage = exports.getUnreadCount = exports.listNotifications = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
+exports.notifyMemberAddedToGroup = exports.notifyGroupCreated = exports.notifyNewMessage = exports.getUnreadCount = exports.listNotifications = exports.notifyMentorTaskDueDate = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
 exports.createNotification = createNotification;
 exports.safeNotify = safeNotify;
 exports.markRead = markRead;
@@ -13,13 +13,16 @@ exports.MENTEE_TYPES = [
     'TASK_DUE_DATE',
     'TASK_CHANGE_REQUEST',
     'EVALUATION_SUBMITTED',
-    'NEW_MESSAGE'
+    'NEW_MESSAGE',
+    'GROUP_CREATED',
+    'ADDED_TO_GROUP'
 ];
 exports.MENTOR_TYPES = [
     'TASK_UPDATED',
     'TASK_SUBMITTED',
     'TASK_STATUS_CHANGED',
-    'NEW_MESSAGE'
+    'NEW_MESSAGE',
+    'GROUP_CREATED'
 ];
 async function createNotification(input, options = {}) {
     const { transaction } = options;
@@ -122,6 +125,21 @@ const notifyTaskStatusChanged = (mentor_id, task, menteeName, status, tx) => cre
     data: { taskId: task.id, status },
 }, { transaction: tx });
 exports.notifyTaskStatusChanged = notifyTaskStatusChanged;
+const notifyMentorTaskDueDate = (mentor_id, menteeName, task, dueDate, kind = '24h', tx) => createNotification({
+    user_id: mentor_id,
+    type: 'TASK_DUE_DATE',
+    title: kind === '1h'
+        ? 'Mentee task due within 1 hour'
+        : 'Mentee task due within 24 hours',
+    message: `${menteeName}'s task "${task.title}" is due on ${formatDueDate(dueDate)}`,
+    data: {
+        taskId: task.id,
+        menteeName,
+        dueDate: new Date(dueDate).toISOString(),
+        reminder: kind,
+    },
+}, { transaction: tx });
+exports.notifyMentorTaskDueDate = notifyMentorTaskDueDate;
 /* ---------- Read side (used by the controller) ---------- */
 const listNotifications = (user_id, limit, offset) => notification_1.Notification.findAll({
     where: { user_id },
@@ -155,4 +173,30 @@ const notifyNewMessage = (recipientId, groupId, groupName, senderId, senderName,
     },
 }, { transaction: tx });
 exports.notifyNewMessage = notifyNewMessage;
+const notifyGroupCreated = async (userId, groupId, groupName) => {
+    return createNotification({
+        user_id: userId,
+        type: 'GROUP_CREATED',
+        title: 'New Group Created',
+        message: `You have been added to the group "${groupName}".`,
+        data: {
+            groupId,
+            groupName,
+        },
+    });
+};
+exports.notifyGroupCreated = notifyGroupCreated;
+const notifyMemberAddedToGroup = async (userId, groupId, groupName) => {
+    return createNotification({
+        user_id: userId,
+        type: 'ADDED_TO_GROUP',
+        title: 'Added to Group',
+        message: `You have been added to the group "${groupName}".`,
+        data: {
+            groupId,
+            groupName,
+        },
+    });
+};
+exports.notifyMemberAddedToGroup = notifyMemberAddedToGroup;
 //# sourceMappingURL=notificationService.js.map

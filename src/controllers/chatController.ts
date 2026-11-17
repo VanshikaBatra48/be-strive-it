@@ -3,9 +3,12 @@ import { z } from 'zod';
 import * as chat from '../service/chatService';
 import { ChatError } from '../service/chatService';
 
-
 // ---------- Validation ----------
 const idSchema = z.coerce.number().int().positive();
+
+const renameGroupBody = z.object({
+  name: z.string().trim().min(2, 'Group name is too short').max(120),
+});
 
 const createGroupBody = z.object({
   name: z.string().trim().min(2, 'Group name is too short').max(120),
@@ -71,6 +74,24 @@ const chatController = {
     res.status(201).json({ success: true, data });
   }),
 
+  renameGroup: wrap(async (req, res) => {
+    const { name } = renameGroupBody.parse(req.body);
+    const data = await chat.renameGroup(
+      actorOf(req),
+      idSchema.parse(req.params.groupId),
+      name
+    );
+    res.json({ success: true, data });
+  }),
+
+  deleteGroup: wrap(async (req, res) => {
+    const data = await chat.deleteGroup(
+      actorOf(req),
+      idSchema.parse(req.params.groupId)
+    );
+    res.json({ success: true, message: 'Group deleted successfully', data });
+  }),
+
   addMembers: wrap(async (req, res) => {
     const { userIds } = memberIdsBody.parse(req.body);
     const data = await chat.addMembers(actorOf(req), idSchema.parse(req.params.groupId), userIds);
@@ -106,7 +127,6 @@ const chatController = {
         files,
       });
       res.status(201).json({ success: true, data });
-      
     } catch (err) {
       await chat.cleanupUploadedFiles(files); // don't leave orphan files if the message failed
       throw err;
@@ -127,8 +147,6 @@ const chatController = {
     await chat.markRead(actorOf(req), idSchema.parse(req.params.groupId), messageId);
     res.json({ success: true });
   }),
-
-
 
   /** Files are only reachable through this authenticated route. */
   downloadAttachment: wrap(async (req, res) => {

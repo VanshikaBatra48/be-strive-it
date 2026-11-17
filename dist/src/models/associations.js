@@ -9,6 +9,7 @@ const tasks_1 = __importDefault(require("./tasks"));
 const resetPassword_1 = __importDefault(require("./resetPassword"));
 const refreshToken_1 = __importDefault(require("./refreshToken"));
 const notification_1 = require("./notification");
+const taskTimeLog_1 = __importDefault(require("./taskTimeLog"));
 let initialized = false;
 /** Register Sequelize model associations once across the application. */
 function initAssociations() {
@@ -28,6 +29,10 @@ function initAssociations() {
     refreshToken_1.default.belongsTo(user_1.default, { as: 'user', foreignKey: 'userId' });
     user_1.default.hasMany(notification_1.Notification, { as: 'notifications', foreignKey: 'user_id', onDelete: 'CASCADE' });
     notification_1.Notification.belongsTo(user_1.default, { as: 'user', foreignKey: 'user_id' });
+    tasks_1.default.hasMany(taskTimeLog_1.default, { foreignKey: 'task_id', as: 'timeLogs' });
+    taskTimeLog_1.default.belongsTo(tasks_1.default, { foreignKey: 'task_id', as: 'task' });
+    user_1.default.hasMany(taskTimeLog_1.default, { foreignKey: 'user_id', as: 'timeLogs' });
+    taskTimeLog_1.default.belongsTo(user_1.default, { foreignKey: 'user_id', as: 'user' });
     initialized = true;
 }
 exports.default = initAssociations;

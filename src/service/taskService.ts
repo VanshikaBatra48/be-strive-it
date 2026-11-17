@@ -24,6 +24,7 @@ import {
   removeUserFromTaskGroups,
   archiveTaskGroups,
 } from '../service/chatService';
+import { closeActiveLogForTask } from './timeLogService';
 
 // Ensure Sequelize associations are registered before any included queries
 initAssociations();
@@ -400,6 +401,9 @@ export const submitTask = async (
     status: 'submitted',
   });
 
+  // Automatically close any running timer on this task
+  await closeActiveLogForTask(task.id);
+
   // Mentor gets TASK_SUBMITTED notification
   await safeNotify(() => notifyTaskSubmitted(task.assigned_by, task, actor.name));
 
@@ -490,6 +494,10 @@ export const updateTaskStatus = async (
   const previousStatus = task.status;
 
   await task.update({ status });
+
+  if (status === 'hold') {
+    await closeActiveLogForTask(task.id);
+  }
 
   if (actor.role === 'mentee' && previousStatus !== status) {
     await safeNotify(() =>

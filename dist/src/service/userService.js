@@ -416,49 +416,49 @@ const userService = {
         return serializePublicUser(user);
     },
     // Get a single user by email (without the password)
-    async getUserByEmail(email) {
-        const user = await user_1.default.findOne({
-            where: { email: email.trim().toLowerCase() },
-            attributes: { exclude: ['password'] },
-        });
-        if (!user) {
-            throw new Error('User not found');
-        }
-        const { password: _password, ...userObj } = user.toJSON();
-        return userObj;
-    },
+    // async getUserByEmail(email: string): Promise<PublicUser> {
+    //   const user = await User.findOne({
+    //     where: { email: email.trim().toLowerCase() },
+    //     attributes: { exclude: ['password'] },
+    //   });
+    //   if (!user) {
+    //     throw new Error('User not found');
+    //   }
+    //   const { password: _password, ...userObj } = user.toJSON();
+    //   return userObj;
+    // },
     // Get all users with a given role
-    async getUsersByRole(role) {
-        const normalizedRole = normalizeRole(role);
-        if (!normalizedRole) {
-            throw new Error('Invalid role');
-        }
-        const users = await user_1.default.findAll({
-            where: { role: normalizedRole },
-            attributes: { exclude: ['password'] },
-            order: [['id', 'ASC']],
-        });
-        return users.map((u) => {
-            const { password: _password, ...userObj } = u.toJSON();
-            return userObj;
-        });
-    },
+    // async getUsersByRole(role: string): Promise<PublicUser[]> {
+    //   const normalizedRole = normalizeRole(role);
+    //   if (!normalizedRole) {
+    //     throw new Error('Invalid role');
+    //   }
+    //   const users = await User.findAll({
+    //     where: { role: normalizedRole },
+    //     attributes: { exclude: ['password'] },
+    //     order: [['id', 'ASC']],
+    //   });
+    //   return users.map((u) => {
+    //     const { password: _password, ...userObj } = u.toJSON();
+    //     return userObj;
+    //   });
+    // },
     // Get all users with a given status
-    async getUsersByStatus(status) {
-        const normalizedStatus = normalizeStatus(status);
-        if (!normalizedStatus) {
-            throw new Error('Invalid status');
-        }
-        const users = await user_1.default.findAll({
-            where: { status: normalizedStatus },
-            attributes: { exclude: ['password'] },
-            order: [['id', 'ASC']],
-        });
-        return users.map((u) => {
-            const { password: _password, ...userObj } = u.toJSON();
-            return userObj;
-        });
-    },
+    // async getUsersByStatus(status: string): Promise<PublicUser[]> {
+    //   const normalizedStatus = normalizeStatus(status);
+    //   if (!normalizedStatus) {
+    //     throw new Error('Invalid status');
+    //   }
+    //   const users = await User.findAll({
+    //     where: { status: normalizedStatus },
+    //     attributes: { exclude: ['password'] },
+    //     order: [['id', 'ASC']],
+    //   });
+    //   return users.map((u) => {
+    //     const { password: _password, ...userObj } = u.toJSON();
+    //     return userObj;
+    //   });
+    // },
     // Update user details
     async updateUser(id, updateData) {
         const user = await user_1.default.findByPk(id);
@@ -732,7 +732,7 @@ const userService = {
         };
     },
     // Change a user's password
-    async changePassword(userId, newPassword, currentPassword) {
+    async changePassword(userId, newPassword) {
         const user = await user_1.default.findByPk(userId, {
             include: MENTOR_PUBLIC_INCLUDE,
             attributes: {
@@ -742,12 +742,6 @@ const userService = {
         if (!user) {
             throw new UserServiceError(404, 'User not found');
         }
-        if (currentPassword !== undefined) {
-            const matchesCurrent = await bcrypt_1.default.compare(currentPassword, user.password);
-            if (!matchesCurrent) {
-                throw new UserServiceError(400, 'Current password is incorrect');
-            }
-        }
         const isSamePassword = await bcrypt_1.default.compare(newPassword, user.password);
         if (isSamePassword) {
             throw new UserServiceError(400, 'New password cannot be the same as the old password');
@@ -756,6 +750,7 @@ const userService = {
         await user.update({
             password: hashedPassword,
             firstLogin: false,
+            on_Board: true,
         });
         const token = (0, authMiddleware_1.generateToken)({
             id: user.id,
@@ -871,17 +866,18 @@ const userService = {
         };
     },
     // Mark first login as completed
-    async completeFirstLogin(id) {
-        const user = await user_1.default.findByPk(id);
-        if (!user) {
-            throw new Error('User not found');
-        }
-        if (user.firstLogin) {
-            user.firstLogin = false;
-            await user.save();
-        }
-        return { message: 'First login completed successfully' };
-    },
+    // async completeFirstLogin(id: number | string): Promise<{ message: string }> {
+    //   const user = await User.findByPk(id);
+    //   if (!user) {
+    //     throw new Error('User not found');
+    //   }
+    //   if (user.firstLogin) {
+    //     user.firstLogin = false;
+    //     user.on_Board = true;
+    //     await user.save();
+    //   }
+    //   return { message: 'First login completed successfully' };
+    // },
 };
 exports.default = userService;
 //# sourceMappingURL=userService.js.map

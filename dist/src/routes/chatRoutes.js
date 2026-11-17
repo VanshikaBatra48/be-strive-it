@@ -20,6 +20,8 @@ router.delete('/groups/:groupId/members/:userId', (0, authMiddleware_1.authorize
 router.post('/groups/:groupId/archive', (0, authMiddleware_1.authorize)('admin', 'mentor'), chatController_1.default.archiveGroup);
 // ---- Messages ----
 router.get('/groups/:groupId/messages', chatController_1.default.getMessages);
+router.patch('/groups/:groupId', (0, authMiddleware_1.authorize)('admin', 'mentor'), chatController_1.default.renameGroup);
+router.delete('/groups/:groupId', (0, authMiddleware_1.authorize)('admin', 'mentor'), chatController_1.default.deleteGroup);
 // Order matters: membership check -> upload -> controller
 router.post('/groups/:groupId/messages', chatUpload_1.ensureCanPost, chatUpload_1.uploadFiles, chatController_1.default.sendMessage);
 router.delete('/groups/:groupId/messages/:messageId', chatController_1.default.deleteMessage);

@@ -1,8 +1,13 @@
 import { Server } from "socket.io";
 import type { Server as HttpServer } from "node:http";
-import { verifyJwt } from "./middleware/authMiddleware"; // adjust path
-import User from "./models/user";                         // adjust path
-import { ChatMember } from "./models/chat";         // adjust path
+
+import { verifyJwt } from "./middleware/authMiddleware";
+import User from "./models/user";
+import { ChatMember } from "./models/chat";
+
+// --------------------------------------------------
+// INTERFACES
+// --------------------------------------------------
 
 interface SocketUser {
   id: number;
@@ -10,116 +15,368 @@ interface SocketUser {
   name: string;
 }
 
-let io: Server | null = null;
+interface SocketData {
+  user: SocketUser;
+  activeGroupId?: number | null;
+}
 
-// Room names. `user:<id>` is the same room your notifications already use.
+// --------------------------------------------------
+// SOCKET.IO SERVER
+// --------------------------------------------------
+
+let io: Server<any, any, any, SocketData> | null = null;
+
+// --------------------------------------------------
+// ROOM NAMES
+// --------------------------------------------------
+
+// Personal room for notifications
 export const userRoom = (userId: number) => `user:${userId}`;
+
+// Group room for actual chat messages
 export const groupRoom = (groupId: number) => `group:${groupId}`;
 
-export function initSocket(httpServer: HttpServer, allowedOrigins: string[]) {
-  io = new Server(httpServer, {
-    cors: { origin: allowedOrigins, credentials: true },
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    transports: ['websocket', 'polling'],
+// Separate room for users currently viewing a group
+export const viewingGroupRoom = (groupId: number) =>
+  `viewing-group:${groupId}`;
+
+// --------------------------------------------------
+// INITIALIZE SOCKET.IO
+// --------------------------------------------------
+
+export function initSocket(
+  httpServer: HttpServer,
+  allowedOrigins: string[]
+) {
+  io = new Server<any, any, any, SocketData>(httpServer, {
+    cors: {
+      origin: allowedOrigins,
+      credentials: true,
+    },
   });
 
-  // ---------- Auth (shared by notifications AND chat) ----------
+  // --------------------------------------------------
+  // SOCKET AUTHENTICATION
+  // --------------------------------------------------
+
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) return next(new Error("Unauthorized: no token"));
+
+    if (!token) {
+      return next(new Error("Unauthorized: no token"));
+    }
 
     try {
       const payload = verifyJwt(token);
 
-      // Same check as REST: the user must still exist
       const user = await User.findByPk(payload.id, {
         attributes: ["id", "name", "role", "status"],
       });
-      if (!user) return next(new Error("Unauthorized: user not found"));
-      if (user.status !== "active") return next(new Error("Unauthorized: account deactivated"));
 
-      socket.data.user = { id: user.id, role: user.role, name: user.name } satisfies SocketUser;
+      if (!user) {
+        return next(new Error("Unauthorized: user not found"));
+      }
+
+      if (user.status !== "active") {
+        return next(new Error("Unauthorized: account deactivated"));
+      }
+
+      socket.data.user = {
+        id: user.id,
+        role: user.role,
+        name: user.name,
+      };
+
       next();
-    } catch (err) {
-      // The chat client looks for exactly "TOKEN_EXPIRED" to refresh the token and reconnect.
-      // (Works if verifyJwt lets jsonwebtoken's TokenExpiredError through.)
-      if ((err as { name?: string })?.name === "TokenExpiredError") {
+    } catch (error) {
+      if (
+        (error as { name?: string })?.name === "TokenExpiredError"
+      ) {
         return next(new Error("TOKEN_EXPIRED"));
       }
+
       next(new Error("Unauthorized: invalid or expired token"));
     }
   });
 
-  io.on("connection", async (socket) => {
-    const { id, role } = socket.data.user as SocketUser;
+  // --------------------------------------------------
+  // SOCKET CONNECTION
+  // --------------------------------------------------
 
-    // ---- Notifications (unchanged) ----
+  io.on("connection", async (socket) => {
+    const { id, role, name } = socket.data.user;
+
+    console.log(
+      `Socket connected: user ${id} (${socket.id})`
+    );
+
+    // --------------------------------------------------
+    // 1. JOIN PERSONAL AND ROLE ROOMS
+    // --------------------------------------------------
+
     socket.join(userRoom(id));
     socket.join(`role:${role}`);
-    console.log(`Socket connected: user ${id} (${socket.id})`);
 
-    // ---- Chat: typing indicator (ephemeral, never stored) ----
-    // Registered BEFORE the async work below so no events are missed.
-    socket.on("typing", (payload: { groupId?: number }) => {
-      const groupId = Number(payload?.groupId);
-      if (!Number.isInteger(groupId)) return;
-      // socket.rooms only contains rooms the SERVER put us in => membership is guaranteed
-      if (!socket.rooms.has(groupRoom(groupId))) return;
-      socket.to(groupRoom(groupId)).emit("typing", {
-        groupId,
-        userId: id,
-        name: (socket.data.user as SocketUser).name,
-      });
+    // --------------------------------------------------
+    // 2. TYPING INDICATOR
+    // --------------------------------------------------
+
+    socket.on(
+      "typing",
+      (payload: { groupId?: number }) => {
+        const groupId = Number(payload?.groupId);
+
+        if (!Number.isInteger(groupId) || groupId <= 0) {
+          return;
+        }
+
+        // Only active group members can send typing events
+        if (!socket.rooms.has(groupRoom(groupId))) {
+          return;
+        }
+
+        socket.to(groupRoom(groupId)).emit("typing", {
+          groupId,
+          userId: id,
+          name,
+        });
+      }
+    );
+
+    // --------------------------------------------------
+    // 3. TRACK CURRENTLY VIEWED GROUP
+    // --------------------------------------------------
+
+    socket.on(
+      "chat:active",
+      async (payload: { groupId?: number }) => {
+        try {
+          const groupId = Number(payload?.groupId);
+
+          if (!Number.isInteger(groupId) || groupId <= 0) {
+            return;
+          }
+
+          // Verify that the user is an active member
+          // of the requested group
+          const membership = await ChatMember.findOne({
+            where: {
+              groupId,
+              userId: id,
+              leftAt: null,
+            },
+          });
+
+          if (!membership) {
+            return;
+          }
+
+          const previousGroupId = socket.data.activeGroupId;
+
+          // Leave the previously viewed group
+          if (
+            previousGroupId &&
+            previousGroupId !== groupId
+          ) {
+            await socket.leave(
+              viewingGroupRoom(previousGroupId)
+            );
+          }
+
+          // Join the currently viewed group
+          await socket.join(
+            viewingGroupRoom(groupId)
+          );
+
+          socket.data.activeGroupId = groupId;
+
+          console.log(
+            `User ${id} is viewing group ${groupId}`
+          );
+        } catch (error) {
+          console.error(
+            "Failed to update active chat group:",
+            error
+          );
+        }
+      }
+    );
+
+    // --------------------------------------------------
+    // 4. STOP TRACKING VIEWED GROUP
+    // --------------------------------------------------
+
+    socket.on("chat:inactive", async () => {
+      try {
+        const activeGroupId = socket.data.activeGroupId;
+
+        if (!activeGroupId) {
+          return;
+        }
+
+        await socket.leave(
+          viewingGroupRoom(activeGroupId)
+        );
+
+        socket.data.activeGroupId = null;
+
+        console.log(
+          `User ${id} stopped viewing group ${activeGroupId}`
+        );
+      } catch (error) {
+        console.error(
+          "Failed to leave viewing group:",
+          error
+        );
+      }
     });
 
-    socket.on("disconnect", () => {
-      console.log(`Socket disconnected: user ${id} (${socket.id})`);
-    });
+    // --------------------------------------------------
+    // 5. JOIN ALL ACTIVE CHAT GROUPS
+    // --------------------------------------------------
 
-    // ---- Chat: join ONLY groups this user is currently an active member of ----
-    // Clients can never join a group room themselves.
     try {
       const memberships = await ChatMember.findAll({
-        where: { userId: id, leftAt: null },
+        where: {
+          userId: id,
+          leftAt: null,
+        },
         attributes: ["groupId"],
       });
-      await Promise.all(memberships.map((m) => socket.join(groupRoom(m.groupId))));
-    } catch (err) {
-      console.error(`Failed to join chat rooms for user ${id}:`, err);
+
+      await Promise.all(
+        memberships.map((membership) =>
+          socket.join(
+            groupRoom(membership.groupId)
+          )
+        )
+      );
+
+      console.log(
+        `User ${id} joined ${memberships.length} chat groups`
+      );
+    } catch (error) {
+      console.error(
+        `Failed to join chat rooms for user ${id}:`,
+        error
+      );
     }
+
+    // --------------------------------------------------
+    // 6. DISCONNECT
+    // --------------------------------------------------
+
+    socket.on("disconnect", () => {
+      console.log(
+        `Socket disconnected: user ${id} (${socket.id})`
+      );
+
+      // Socket.IO automatically removes the disconnected
+      // socket from all rooms.
+    });
   });
 
   return io;
 }
 
+// --------------------------------------------------
+// GET SOCKET.IO INSTANCE
+// --------------------------------------------------
+
 export function getIO() {
-  if (!io) throw new Error("Socket.IO not initialised");
+  if (!io) {
+    throw new Error("Socket.IO not initialised");
+  }
+
   return io;
 }
 
-// ---------- Chat helpers (used by chatService) ----------
-// These are no-ops if the socket server isn't running (e.g. scripts/tests).
+// --------------------------------------------------
+// EMIT CHAT MESSAGE TO GROUP
+// --------------------------------------------------
 
-export function emitToGroup(groupId: number, event: string, payload: unknown): void {
+export function emitToGroup(
+  groupId: number,
+  event: string,
+  payload: unknown
+): void {
   io?.to(groupRoom(groupId)).emit(event, payload);
 }
 
-export function emitToUser(userId: number, event: string, payload: unknown): void {
+// --------------------------------------------------
+// EMIT NOTIFICATION TO USER
+// --------------------------------------------------
+
+export function emitToUser(
+  userId: number,
+  event: string,
+  payload: unknown
+): void {
   io?.to(userRoom(userId)).emit(event, payload);
 }
 
-/** Put all of a user's live sockets into a group room (after they are added). */
-export function addUserToGroupRoom(userId: number, groupId: number): void {
-  io?.in(userRoom(userId)).socketsJoin(groupRoom(groupId));
+// --------------------------------------------------
+// ADD USER TO GROUP ROOM
+// --------------------------------------------------
+
+export function addUserToGroupRoom(
+  userId: number,
+  groupId: number
+): void {
+  io
+    ?.in(userRoom(userId))
+    .socketsJoin(groupRoom(groupId));
 }
 
-/** Kick all of a user's live sockets out of a group room (after removal). */
-export function removeUserFromGroupRoom(userId: number, groupId: number): void {
-  io?.in(userRoom(userId)).socketsLeave(groupRoom(groupId));
+// --------------------------------------------------
+// REMOVE USER FROM GROUP ROOM
+// --------------------------------------------------
+
+export function removeUserFromGroupRoom(
+  userId: number,
+  groupId: number
+): void {
+  io
+    ?.in(userRoom(userId))
+    .socketsLeave(groupRoom(groupId));
 }
 
-/** Force-close all sockets of a user (deactivated / deleted account). */
-export function disconnectUser(userId: number): void {
-  io?.in(userRoom(userId)).disconnectSockets(true);
+// --------------------------------------------------
+// DISCONNECT ALL USER SOCKETS
+// --------------------------------------------------
+
+export function disconnectUser(
+  userId: number
+): void {
+  io
+    ?.in(userRoom(userId))
+    .disconnectSockets(true);
+}
+
+// --------------------------------------------------
+// GET USERS CURRENTLY VIEWING A GROUP
+// --------------------------------------------------
+
+export async function getUsersViewingGroup(
+  groupId: number
+): Promise<Set<number>> {
+  if (!io) {
+    return new Set<number>();
+  }
+
+  const sockets = await io
+    .in(viewingGroupRoom(groupId))
+    .fetchSockets();
+
+  const viewingUserIds = new Set<number>();
+
+  for (const socket of sockets) {
+    const userId = Number(socket.data.user?.id);
+
+    if (Number.isInteger(userId)) {
+      viewingUserIds.add(userId);
+    }
+  }
+
+  return viewingUserIds;
 }

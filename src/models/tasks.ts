@@ -11,7 +11,7 @@ import type User from './user';
 
 export type TaskCategory = 'upskill' | 'research' | 'client-project' | 'inhouse-project';
 export type TaskPriority = 'low' | 'medium' | 'high';
-export type TaskStatus = 'in-progress' | 'submitted' | 'needs-revision' | 'complete' | 'hold';
+export type TaskStatus = 'in-progress' | 'submitted' | 'needs-revision' | 'complete' | 'hold' | 'blocker';
 
 class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare id: CreationOptional<number>;
@@ -35,6 +35,8 @@ class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare evaluated_at: CreationOptional<Date | null>;
   declare due_reminder_24h_sent: CreationOptional<boolean>;
   declare due_reminder_1h_sent: CreationOptional<boolean>;
+  declare actual_seconds: CreationOptional<number>;
+
 
   // Associations
   declare mentee?: NonAttribute<User | null>;
@@ -93,7 +95,7 @@ Task.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold'),
+      type: DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold', 'blocker'),
       allowNull: false,
       defaultValue: 'in-progress',
     },
@@ -113,6 +115,11 @@ Task.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    actual_seconds: {
+  type: DataTypes.INTEGER,
+  allowNull: false,
+  defaultValue: 0,
+},
     score: {
       type: DataTypes.INTEGER,
       allowNull: true,
