@@ -11,7 +11,7 @@ import type User from './user';
 
 export type TaskCategory = 'upskill' | 'research' | 'client-project' | 'inhouse-project';
 export type TaskPriority = 'low' | 'medium' | 'high';
-export type TaskStatus = 'in-progress' | 'submitted' | 'needs-revision' | 'complete' | 'hold';
+export type TaskStatus = 'in-progress' | 'submitted' | 'needs-revision' | 'complete' | 'hold' | 'blocker';
 
 class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare id: CreationOptional<number>;
@@ -93,7 +93,7 @@ Task.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold'),
+      type: DataTypes.ENUM('in-progress', 'submitted', 'needs-revision', 'complete', 'hold', 'blocker'),
       allowNull: false,
       defaultValue: 'in-progress',
     },
