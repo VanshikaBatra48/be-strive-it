@@ -13,7 +13,11 @@ import {
   getUsersViewingGroup,
 } from '../socket';
 
-import {notifyNewMessage, safeNotify} from "../service/notificationService";
+import {
+  notifyNewMessage, 
+  safeNotify,
+  notifyGroupCreated,
+  notifyMemberAddedToGroup,} from "../service/notificationService";
 // ---------- Config ----------
 export const MIN_GROUP_MEMBERS = 3; // creator + at least 2 others => no one-to-one chats
 export const MAX_BODY_LENGTH = 2000;
@@ -228,12 +232,26 @@ export async function createGroup(
   });
 
   for (const id of [actor.id, ...memberIds]) {
-    addUserToGroupRoom(id, group.id);
-    emitToUser(id, 'group:changed', { groupId: group.id });
-  }
-  await announce(group.id, `${actor.name} created the group`);
+  addUserToGroupRoom(id, group.id);
+  emitToUser(id, 'group:changed', { groupId: group.id });
+}
 
-  return getGroupDetail(actor, group.id);
+// Send notification only to newly added members
+await Promise.all(
+  memberIds.map((userId) =>
+    safeNotify(() =>
+      notifyGroupCreated(
+        userId,
+        group.id,
+        group.name
+      )
+    )
+  )
+);
+
+await announce(group.id, `${actor.name} created the group`);
+
+return getGroupDetail(actor, group.id);
 }
 
 /** Groups the actor is an active member of, with last message + unread count. */
@@ -330,27 +348,55 @@ export async function getGroupDetail(actor: Actor, groupId: number) {
     })),
   };
 }
-
-export async function addMembers(actor: Actor, groupId: number, userIds: number[]) {
+export async function addMembers(
+  actor: Actor,
+  groupId: number,
+  userIds: number[]
+) {
   const { group } = await requireManager(actor, groupId);
-  if (group.status !== 'active') throw new ChatError('This group is archived', 409);
+
+  if (group.status !== 'active') {
+    throw new ChatError('This group is archived', 409);
+  }
 
   const ids = [...new Set(userIds)];
+
   await assertCanAdd(actor, ids);
 
   const added: number[] = [];
+
   for (const id of ids) {
-    if (await upsertMember(groupId, id)) added.push(id);
+    if (await upsertMember(groupId, id)) {
+      added.push(id);
+    }
   }
 
   if (added.length) {
     const names = await userNames(added);
+
     emitToGroup(groupId, 'group:changed', { groupId });
+
+    // Notify only newly added members
+    await Promise.all(
+      added.map((userId) =>
+        safeNotify(() =>
+          notifyMemberAddedToGroup(
+            userId,
+            groupId,
+            group.name
+          )
+        )
+      )
+    );
+
     await announce(
       groupId,
-      `${actor.name} added ${added.map((id) => names.get(id) ?? 'a user').join(', ')}`
+      `${actor.name} added ${added
+        .map((id) => names.get(id) ?? 'a user')
+        .join(', ')}`
     );
   }
+
   return getGroupDetail(actor, groupId);
 }
 
@@ -475,7 +521,7 @@ const viewingUserIds = await getUsersViewingGroup(groupId);
 
 // Prepare message preview
 const messagePreview = body
-  ? body.slice(0, 150)
+  ? body.slice(0, 20) + "......"
   : 'Sent an attachment';
 
 // Notify only members who are NOT currently viewing this group

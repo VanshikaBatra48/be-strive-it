@@ -10,7 +10,8 @@ export const MENTEE_TYPES: NotificationType[] = [
   'TASK_CHANGE_REQUEST',
   'EVALUATION_SUBMITTED',
   'NEW_MESSAGE',
-  'ADDED_TO_NEW_GROUP'
+  'GROUP_CREATED',
+  'ADDED_TO_GROUP'
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
@@ -18,7 +19,8 @@ export const MENTOR_TYPES: NotificationType[] = [
   'TASK_SUBMITTED',
   'TASK_STATUS_CHANGED',
   'NEW_MESSAGE',
-  'ADDED_TO_NEW_GROUP'
+  'GROUP_CREATED'
+ 
 ];
 
 /* ---------- Core ---------- */
@@ -298,3 +300,38 @@ export const notifyNewMessage = (
     },
     { transaction: tx }
   );
+
+
+  export const notifyGroupCreated = async (
+  userId: number,
+  groupId: number,
+  groupName: string
+) => {
+  return createNotification({
+    user_id: userId,
+    type: 'GROUP_CREATED',
+    title: 'New Group Created',
+    message: `You have been added to the group "${groupName}".`,
+    data: {
+      groupId,
+      groupName,
+    },
+  });
+};
+
+export const notifyMemberAddedToGroup = async (
+  userId: number,
+  groupId: number,
+  groupName: string
+) => {
+  return createNotification({
+    user_id: userId,
+    type: 'ADDED_TO_GROUP',
+    title: 'Added to Group',
+    message: `You have been added to the group "${groupName}".`,
+    data: {
+      groupId,
+      groupName,
+    },
+  });
+};
