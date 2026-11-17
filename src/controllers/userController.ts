@@ -346,7 +346,9 @@ const userController = {
         return;
       }
 
-      setRefreshCookie(res, newToken);
+      if (newToken) {
+        setRefreshCookie(res, newToken);
+      }
 
       const accessToken = generateAccessToken({
         id: user.id,
@@ -427,9 +429,8 @@ const userController = {
   // ==========================================
   async changePassword(req: Request, res: Response): Promise<void> {
     try {
-      const { newPassword, currentPassword } = req.body as {
+      const { newPassword } = req.body as {
         newPassword?: string;
-        currentPassword?: string;
       };
 
       if (!newPassword) {
@@ -460,7 +461,7 @@ const userController = {
       }
 
       // Call service to verify and update password
-      const result = await userService.changePassword(userId, newPassword, currentPassword);
+      const result = await userService.changePassword(userId, newPassword);
 
       // Invalidate all old sessions (other devices), then issue a new one here
       await revokeAllForUser(userId);
@@ -582,47 +583,47 @@ const userController = {
   // ==========================================
   // 9. Complete first login
   // ==========================================
-  async completeFirstLogin(
-    req: Request<{ id: string }>,
-    res: Response
-  ): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ success: false, message: 'Not authenticated' });
-        return;
-      }
+  // async completeFirstLogin(
+  //   req: Request<{ id: string }>,
+  //   res: Response
+  // ): Promise<void> {
+  //   try {
+  //     if (!req.user) {
+  //       res.status(401).json({ success: false, message: 'Not authenticated' });
+  //       return;
+  //     }
 
-      const targetId = Number(req.params.id);
-      if (req.user.id !== targetId && req.user.role !== 'admin') {
-        res.status(403).json({
-          success: false,
-          message: 'You can only complete first login for your own account.',
-        });
-        return;
-      }
+  //     const targetId = Number(req.params.id);
+  //     if (req.user.id !== targetId && req.user.role !== 'admin') {
+  //       res.status(403).json({
+  //         success: false,
+  //         message: 'You can only complete first login for your own account.',
+  //       });
+  //       return;
+  //     }
 
-      // id is already validated by Zod (getUserSchema)
-      const result = await userService.completeFirstLogin(req.params.id);
+  //     // id is already validated by Zod (getUserSchema)
+  //     const result = await userService.completeFirstLogin(req.params.id);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      console.error('Error completing first login:', error);
-      const message = getErrorMessage(error);
+  //     res.status(200).json({
+  //       success: true,
+  //       message: result.message,
+  //     });
+  //   } catch (error) {
+  //     console.error('Error completing first login:', error);
+  //     const message = getErrorMessage(error);
 
-      if (message === 'User not found') {
-        res.status(404).json({ success: false, message });
-        return;
-      }
+  //     if (message === 'User not found') {
+  //       res.status(404).json({ success: false, message });
+  //       return;
+  //     }
 
-      res.status(500).json({
-        success: false,
-        message: 'Failed to complete first login',
-      });
-    }
-  },
+  //     res.status(500).json({
+  //       success: false,
+  //       message: 'Failed to complete first login',
+  //     });
+  //   }
+  // },
 };
 
 export default userController;

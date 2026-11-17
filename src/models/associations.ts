@@ -3,6 +3,7 @@ import Task from './tasks';
 import PasswordReset from './resetPassword';
 import RefreshToken from './refreshToken';
 import { Notification } from './notification';
+import TaskSubmission from './taskSubmission';
 
 let initialized = false;
 
@@ -29,8 +30,40 @@ export function initAssociations(): void {
 
   User.hasMany(Notification, { as: 'notifications', foreignKey: 'user_id', onDelete: 'CASCADE' });
   Notification.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
+  // A task can have multiple submissions.
+  Task.hasMany(TaskSubmission, {
+    foreignKey: 'taskId',
+    as: 'submissions'
+  });
 
-  initialized = true;
-}
+  TaskSubmission.belongsTo(Task, {
+    foreignKey: 'taskId',
+    as: 'task'
+  });
+
+  // A user can submit multiple task versions.
+  User.hasMany(TaskSubmission, {
+    foreignKey: 'submittedBy',
+    as: 'taskSubmissions'
+  });
+
+  TaskSubmission.belongsTo(User, {
+    foreignKey: 'submittedBy',
+    as: 'submitter'
+  });
+
+  // A mentor can review multiple submissions.
+  User.hasMany(TaskSubmission, {
+    foreignKey: 'reviewedBy',
+    as: 'reviewedSubmissions'
+  });
+
+  TaskSubmission.belongsTo(User, {
+    foreignKey: 'reviewedBy',
+    as: 'reviewer'
+  });
+
+    initialized = true;
+  }
 
 export default initAssociations;

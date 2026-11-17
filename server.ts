@@ -17,7 +17,7 @@ import './src/models/notification';
 import './src/models/chat';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
-
+import taskSubmissionRoutes from './src/routes/taskSubmissionRoutes';
 // Routes
 import userRoutes from './src/routes/userRoute';
 import taskRoutes from './src/routes/taskRoutes';
@@ -58,7 +58,6 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(cookieParser());
 
 // Register routes
@@ -68,6 +67,10 @@ app.use('/api', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api', passwordResetRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/tasks', taskRoutes);
+
+app.use('/api', taskSubmissionRoutes);
 
 // Health / root route
 app.get('/', (_req: Request, res: Response) => {

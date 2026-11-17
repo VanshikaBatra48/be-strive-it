@@ -22,6 +22,7 @@ class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
   declare joined: CreationOptional<Date>;
   declare status: CreationOptional<UserStatus>;
   declare firstLogin: CreationOptional<boolean>;
+  declare on_Board: CreationOptional<boolean>;
   declare assignedMentees: CreationOptional<(string | number)[]>;
 
   // Self-referential associations (Mentor <-> Mentees)
@@ -76,6 +77,11 @@ User.init(
     password: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    on_Board:{
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     role: {
       type: DataTypes.ENUM('admin', 'mentee', 'mentor'),

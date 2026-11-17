@@ -32,12 +32,12 @@ router.post('/users/logout-all', verifyToken, userController.logoutAll);
 router.get('/users/me', verifyToken, userController.getMe);
 
 // Complete first login (authenticated user themselves or admin)
-router.patch(
-  '/users/:id/complete-first-login',
-  verifyToken,
-  validate(getUserSchema),
-  userController.completeFirstLogin
-);
+// router.patch(
+//   '/users/:id/complete-first-login',
+//   verifyToken,
+//   validate(getUserSchema),
+//   userController.completeFirstLogin
+// );
 
 // Change password (accessible before first-login gate completes)
 router.patch(

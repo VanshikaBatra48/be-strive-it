@@ -1,0 +1,387 @@
+import { Transaction } from 'sequelize';
+
+import { sequelize } from '../config/database';
+import Task from '../models/tasks';
+import TaskSubmission from '../models/taskSubmission';
+import User from '../models/user';
+
+interface SubmitTaskInput {
+  taskId: number;
+  submittedBy: number;
+  submissionText: string;
+  attachmentUrl?: string;
+}
+
+interface ReviewInput {
+  submissionId: number;
+  mentorId: number;
+  feedback?: string;
+}
+
+// -------------------------------------
+// 1. SUBMIT OR RESUBMIT TASK
+// -------------------------------------
+
+export const submitTask = async (
+  input: SubmitTaskInput
+) => {
+
+  const transaction = await sequelize.transaction();
+
+  try {
+
+    const {
+      taskId,
+      submittedBy,
+      submissionText,
+      attachmentUrl
+    } = input;
+
+    if (!submissionText?.trim()) {
+      throw new Error('Submission description is required');
+    }
+
+    const task = await Task.findByPk(taskId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    // Verify that the task belongs to this mentee.
+    // Adjust assignedTo if your Task model uses another field.
+    if (Number(task.get('mentee_id')) !== submittedBy) {
+      throw new Error('You are not assigned to this task');
+    }
+
+    const latestSubmission = await TaskSubmission.findOne({
+      where: { taskId },
+      order: [['version', 'DESC']],
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+
+    let nextVersion = 1;
+
+    if (latestSubmission) {
+
+      if (latestSubmission.status === 'approved') {
+        throw new Error(
+          'This task has already been approved'
+        );
+      }
+
+      if (latestSubmission.status !== 'changes_requested') {
+        throw new Error(
+          'Your previous submission is still awaiting review'
+        );
+      }
+
+      nextVersion = latestSubmission.version + 1;
+    }
+
+    const newSubmission = await TaskSubmission.create(
+      {
+        taskId,
+        submittedBy,
+        version: nextVersion,
+        submissionText,
+        attachmentUrl: attachmentUrl || null,
+        status: 'submitted'
+      },
+      { transaction }
+    );
+    await task.update(
+      {
+        status: 'submitted'
+      },
+      { transaction }
+    );
+    await transaction.commit();
+
+    // TODO: Notify the assigned mentor about the new submission.
+    // Integrate this with your existing notification service.
+
+    return {
+      message: 'Task submitted successfully',
+      submission: newSubmission
+    };
+
+  } catch (error) {
+
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+
+// -------------------------------------
+// 2. MENTOR REQUESTS CHANGES
+// -------------------------------------
+
+export const requestChanges = async (
+  input: ReviewInput
+) => {
+
+  const { submissionId, mentorId, feedback } = input;
+
+  if (!feedback?.trim()) {
+    throw new Error('Please provide feedback for the mentee');
+  }
+
+  const submission = await TaskSubmission.findByPk(
+    submissionId
+  );
+
+  if (!submission) {
+    throw new Error('Submission not found');
+  }
+
+  if (submission.status !== 'submitted') {
+    throw new Error(
+      'Only pending submissions can be reviewed'
+    );
+  }
+
+  const task = await Task.findByPk(submission.taskId);
+
+  if (!task) {
+    throw new Error('Associated task not found');
+  }
+
+  // Verify that the reviewer is the assigned mentor.
+  // Adjust assignedBy if your Task model uses another field.
+  if (Number(task.get('assignedBy')) !== mentorId) {
+    throw new Error(
+      'You are not authorized to review this task'
+    );
+  }
+
+  submission.status = 'changes_requested';
+  submission.mentorFeedback = feedback;
+  submission.reviewedBy = mentorId;
+  submission.reviewedAt = new Date();
+
+  await submission.save();
+
+  // TODO: Notify the mentee that changes are requested.
+
+  return {
+    message: 'Changes requested successfully',
+    submission
+  };
+};
+
+
+// -------------------------------------
+// 3. MENTOR APPROVES SUBMISSION
+// -------------------------------------
+
+export const approveSubmission = async (
+  input: ReviewInput
+) => {
+
+  const { submissionId, mentorId } = input;
+
+  const transaction = await sequelize.transaction();
+
+  try {
+
+    const submission = await TaskSubmission.findByPk(
+      submissionId,
+      {
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      }
+    );
+
+    if (!submission) {
+      throw new Error('Submission not found');
+    }
+
+    if (submission.status !== 'submitted') {
+      throw new Error(
+        'Only pending submissions can be approved'
+      );
+    }
+
+    const task = await Task.findByPk(
+      submission.taskId,
+      { transaction }
+    );
+
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    if (Number(task.get('assignedBy')) !== mentorId) {
+      throw new Error(
+        'You are not authorized to approve this task'
+      );
+    }
+
+    // Ensure this is the latest version.
+    const latestSubmission = await TaskSubmission.findOne({
+      where: { taskId: submission.taskId },
+      order: [['version', 'DESC']],
+      transaction
+    });
+
+    if (
+      !latestSubmission ||
+      latestSubmission.id !== submission.id
+    ) {
+      throw new Error(
+        'Only the latest submission can be approved'
+      );
+    }
+
+    submission.status = 'approved';
+    submission.reviewedBy = mentorId;
+    submission.reviewedAt = new Date();
+
+    await submission.save({ transaction });
+
+    await transaction.commit();
+
+    // TODO: Update your main Task status if required.
+    // TODO: Notify the mentee about approval.
+
+    return {
+      message: 'Task approved successfully',
+      submission
+    };
+
+  } catch (error) {
+
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+
+// -------------------------------------
+// 4. GET COMPLETE SUBMISSION HISTORY
+// -------------------------------------
+
+export const getSubmissionHistory = async (
+  taskId: number,
+  userId: number,
+  role: string
+) => {
+
+  const task = await Task.findByPk(taskId);
+
+  if (!task) {
+    throw new Error('Task not found');
+  }
+
+  const assignedTo = Number(task.get('assignedTo'));
+  const assignedBy = Number(task.get('assignedBy'));
+
+  // Check mentee access
+  if (role === 'mentee' && assignedTo !== userId) {
+    throw new Error('You cannot access this task history');
+  }
+
+  // Check mentor access
+  if (role === 'mentor' && assignedBy !== userId) {
+    throw new Error('You cannot access this task history');
+  }
+
+  // Only authorized roles can access history
+  if (!['admin', 'mentor', 'mentee'].includes(role)) {
+    throw new Error('Unauthorized access');
+  }
+
+  const submissions = await TaskSubmission.findAll({
+
+    where: { taskId },
+
+    include: [
+      {
+        model: User,
+        as: 'submitter',
+        attributes: ['id', 'name', 'email']
+      },
+      {
+        model: User,
+        as: 'reviewer',
+        attributes: ['id', 'name', 'email'],
+        required: false
+      }
+    ],
+
+    order: [['version', 'ASC']]
+  });
+
+  return {
+    taskId,
+    totalVersions: submissions.length,
+    submissions
+  };
+};
+// -------------------------------------
+// 5. GET INDIVIDUAL SUBMISSION
+// -------------------------------------
+
+export const getSubmissionById = async (
+  submissionId: number,
+  userId: number,
+  role: string
+) => {
+
+  const submission = await TaskSubmission.findByPk(
+    submissionId
+  );
+
+  if (!submission) {
+    throw new Error('Submission not found');
+  }
+
+  const task = await Task.findByPk(submission.taskId);
+
+  if (!task) {
+    throw new Error('Associated task not found');
+  }
+
+  const assignedTo = Number(task.get('assignedTo'));
+  const assignedBy = Number(task.get('assignedBy'));
+
+  // Mentee can access their own assigned task.
+  if (role === 'mentee' && assignedTo !== userId) {
+    throw new Error('You cannot access this submission');
+  }
+
+  // Mentor can access tasks assigned to them.
+  if (role === 'mentor' && assignedBy !== userId) {
+    throw new Error('You cannot access this submission');
+  }
+
+  if (!['admin', 'mentor', 'mentee'].includes(role)) {
+    throw new Error('Unauthorized access');
+  }
+
+  const result = await TaskSubmission.findByPk(
+    submissionId,
+    {
+      include: [
+        {
+          model: User,
+          as: 'submitter',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'reviewer',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        }
+      ]
+    }
+  );
+
+  return result;
+};
