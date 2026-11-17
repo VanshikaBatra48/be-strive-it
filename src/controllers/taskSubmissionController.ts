@@ -173,7 +173,9 @@ export const approveSubmission = async (
     const result = await taskSubmissionService.approveSubmission({
       submissionId,
       mentorId
+      
     });
+    
 
     return res.status(200).json({
       success: true,
@@ -188,8 +190,8 @@ export const approveSubmission = async (
       message: error.message || 'Unable to approve submission'
     });
   }
+  
 };
-
 
 // -------------------------------------
 // GET SUBMISSION HISTORY
