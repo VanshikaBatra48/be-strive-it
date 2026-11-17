@@ -10,7 +10,9 @@ import {
   addUserToGroupRoom,
   removeUserFromGroupRoom,
   disconnectUser,
+  getUsersViewingGroup,
 } from '../socket';
+
 import {notifyNewMessage, safeNotify} from "../service/notificationService";
 // ---------- Config ----------
 export const MIN_GROUP_MEMBERS = 3; // creator + at least 2 others => no one-to-one chats
@@ -468,34 +470,42 @@ export async function sendMessage(
     },
   });
 
-  // Prepare a short message preview for the notification
-  const messagePreview = body
-    ? body.slice(0, 150)
-    : 'Sent an attachment';
+// Get users who are currently viewing this group
+const viewingUserIds = await getUsersViewingGroup(groupId);
 
-  //Notify every group member except the sender
-  await Promise.all(
-    groupMembers
-      .filter((member) => member.userId !== actor.id)
-      .map((member) =>
-        safeNotify(() =>
-          notifyNewMessage(
-            member.userId,       // Notification recipient
-            groupId,             // Group ID
-            group.name,          // Group name
-            actor.id,            // Sender ID
-            actor.name,          // Sender name
-            message.id,          // Message ID
-            messagePreview       // Message preview
-          )
+// Prepare message preview
+const messagePreview = body
+  ? body.slice(0, 150)
+  : 'Sent an attachment';
+
+// Notify only members who are NOT currently viewing this group
+await Promise.all(
+  groupMembers
+    .filter(
+      (member) =>
+        member.userId !== actor.id &&
+        !viewingUserIds.has(member.userId)
+    )
+    .map((member) =>
+      safeNotify(() =>
+        notifyNewMessage(
+          member.userId,
+          groupId,
+          group.name,
+          actor.id,
+          actor.name,
+          message.id,
+          messagePreview
         )
       )
-  );
+    )
+);
 
   // Return the message to the controller
   return payload;
 
 }
+
 /**
  * Soft delete: row stays (so history order/"message deleted" placeholder is kept),
  * but the text is erased and attached files are removed from disk.
