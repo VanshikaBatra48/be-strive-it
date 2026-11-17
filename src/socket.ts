@@ -19,6 +19,9 @@ export const groupRoom = (groupId: number) => `group:${groupId}`;
 export function initSocket(httpServer: HttpServer, allowedOrigins: string[]) {
   io = new Server(httpServer, {
     cors: { origin: allowedOrigins, credentials: true },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
   });
 
   // ---------- Auth (shared by notifications AND chat) ----------

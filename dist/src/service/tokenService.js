@@ -73,8 +73,19 @@ async function rotateRefreshToken(rawToken) {
         throw new RefreshTokenError('Invalid refresh token');
     if (record.revokedAt) {
         const withinGrace = Date.now() - record.revokedAt.getTime() < REUSE_GRACE_MS;
-        if (!withinGrace) {
-            // Old token replayed -> likely stolen. Kill the whole session family.
+        if (withinGrace) {
+            // Concurrent request already rotated this token within the grace window.
+            // Return the active replacement token for this family instead of revoking it.
+            const activeRecord = await refreshToken_1.default.findOne({
+                where: { familyId: record.familyId, revokedAt: null, expiresAt: { [sequelize_1.Op.gt]: new Date() } },
+                order: [['createdAt', 'DESC']],
+            });
+            if (activeRecord) {
+                return { userId: record.userId, newToken: '' };
+            }
+        }
+        else {
+            // Old token replayed after grace window -> likely stolen. Kill the whole session family.
             await refreshToken_1.default.update({ revokedAt: new Date() }, { where: { familyId: record.familyId, revokedAt: null } });
         }
         throw new RefreshTokenError('Refresh token has been revoked');

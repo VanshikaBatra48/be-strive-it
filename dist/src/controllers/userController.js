@@ -309,7 +309,9 @@ const userController = {
                 });
                 return;
             }
-            (0, tokenService_1.setRefreshCookie)(res, newToken);
+            if (newToken) {
+                (0, tokenService_1.setRefreshCookie)(res, newToken);
+            }
             const accessToken = (0, authMiddleware_1.generateAccessToken)({
                 id: user.id,
                 email: user.email,

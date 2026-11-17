@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUnreadCount = exports.listNotifications = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
+exports.notifyNewMessage = exports.getUnreadCount = exports.listNotifications = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
 exports.createNotification = createNotification;
 exports.safeNotify = safeNotify;
 exports.markRead = markRead;
@@ -13,11 +13,13 @@ exports.MENTEE_TYPES = [
     'TASK_DUE_DATE',
     'TASK_CHANGE_REQUEST',
     'EVALUATION_SUBMITTED',
+    'NEW_MESSAGE'
 ];
 exports.MENTOR_TYPES = [
     'TASK_UPDATED',
     'TASK_SUBMITTED',
     'TASK_STATUS_CHANGED',
+    'NEW_MESSAGE'
 ];
 async function createNotification(input, options = {}) {
     const { transaction } = options;
@@ -138,4 +140,19 @@ async function markAllRead(user_id) {
     const [affected] = await notification_1.Notification.update({ is_read: true }, { where: { user_id, is_read: false } });
     return affected;
 }
+/*---------------Notification that is same in both--------------------------------*/
+const notifyNewMessage = (recipientId, groupId, groupName, senderId, senderName, messageId, message, tx) => createNotification({
+    user_id: recipientId,
+    type: 'NEW_MESSAGE',
+    title: `New message in ${groupName}`,
+    message: `${senderName}: ${message}`,
+    data: {
+        groupId,
+        groupName,
+        senderId,
+        senderName,
+        messageId,
+    },
+}, { transaction: tx });
+exports.notifyNewMessage = notifyNewMessage;
 //# sourceMappingURL=notificationService.js.map

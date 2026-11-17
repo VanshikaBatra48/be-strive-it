@@ -31,6 +31,7 @@ const database_1 = require("../config/database");
 const user_1 = __importDefault(require("../models/user"));
 const chat_1 = require("../models/chat");
 const socket_1 = require("../socket");
+const notificationService_1 = require("../service/notificationService");
 // ---------- Config ----------
 exports.MIN_GROUP_MEMBERS = 2; // creator + at least 1 other 
 exports.MAX_BODY_LENGTH = 2000;
@@ -366,6 +367,8 @@ async function assertCanPost(actor, groupId) {
     return group;
 }
 async function sendMessage(actor, groupId, input) {
+    //Check whether the sender is allowed to post
+    const group = await assertCanPost(actor, groupId);
     await assertCanPost(actor, groupId);
     const body = (input.body ?? '').trim();
     const files = input.files ?? [];
@@ -393,6 +396,29 @@ async function sendMessage(actor, groupId, input) {
     });
     const payload = serializeMessage(message, attachments);
     (0, socket_1.emitToGroup)(groupId, 'message:new', payload);
+    //  Get all active members of this group
+    const groupMembers = await chat_1.ChatMember.findAll({
+        where: {
+            groupId,
+            leftAt: null,
+        },
+    });
+    // Prepare a short message preview for the notification
+    const messagePreview = body
+        ? body.slice(0, 150)
+        : 'Sent an attachment';
+    //Notify every group member except the sender
+    await Promise.all(groupMembers
+        .filter((member) => member.userId !== actor.id)
+        .map((member) => (0, notificationService_1.safeNotify)(() => (0, notificationService_1.notifyNewMessage)(member.userId, // Notification recipient
+    groupId, // Group ID
+    group.name, // Group name
+    actor.id, // Sender ID
+    actor.name, // Sender name
+    message.id, // Message ID
+    messagePreview // Message preview
+    ))));
+    // Return the message to the controller
     return payload;
 }
 /**

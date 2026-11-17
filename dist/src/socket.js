@@ -24,6 +24,9 @@ exports.groupRoom = groupRoom;
 function initSocket(httpServer, allowedOrigins) {
     io = new socket_io_1.Server(httpServer, {
         cors: { origin: allowedOrigins, credentials: true },
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        transports: ['websocket', 'polling'],
     });
     // ---------- Auth (shared by notifications AND chat) ----------
     io.use(async (socket, next) => {
