@@ -9,14 +9,16 @@ export const MENTEE_TYPES: NotificationType[] = [
   'TASK_DUE_DATE',
   'TASK_CHANGE_REQUEST',
   'EVALUATION_SUBMITTED',
-  'NEW_MESSAGE'
+  'NEW_MESSAGE',
+  'ADDED_TO_NEW_GROUP'
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
   'TASK_UPDATED',
   'TASK_SUBMITTED',
   'TASK_STATUS_CHANGED',
-  'NEW_MESSAGE'
+  'NEW_MESSAGE',
+  'ADDED_TO_NEW_GROUP'
 ];
 
 /* ---------- Core ---------- */
@@ -208,6 +210,34 @@ export const notifyTaskStatusChanged = (
       title: 'Task status changed',
       message: `${menteeName} moved "${task.title}" to ${status}`,
       data: { taskId: task.id, status },
+    },
+    { transaction: tx }
+  );
+
+  export const notifyMentorTaskDueDate = (
+  mentor_id: number,
+  menteeName: string,
+  task: TaskRef,
+  dueDate: Date,
+  kind: DueReminderKind = '24h',
+  tx?: Transaction
+) =>
+  createNotification(
+    {
+      user_id: mentor_id,
+      type: 'TASK_DUE_DATE',
+      title: kind === '1h'
+        ? 'Mentee task due within 1 hour'
+        : 'Mentee task due within 24 hours',
+
+      message: `${menteeName}'s task "${task.title}" is due on ${formatDueDate(dueDate)}`,
+
+      data: {
+        taskId: task.id,
+        menteeName,
+        dueDate: new Date(dueDate).toISOString(),
+        reminder: kind,
+      },
     },
     { transaction: tx }
   );
