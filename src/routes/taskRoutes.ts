@@ -23,6 +23,13 @@ import {
   deleteTaskController,
 } from '../controllers/taskController';
 
+import {
+  startTimerController,
+  stopTimerController,
+  getTaskTimeController,
+  getActiveTimerController
+} from '../controllers/timeLogController';
+
 const router = Router();
 
 // All task routes require authentication and completed first login
@@ -56,6 +63,29 @@ router.patch(
   authorize('admin', 'mentor', 'mentee'),
   validate(updateTaskStatusSchema),
   updateTaskStatusController
+);
+// Time tracking
+router.get('/time/active', authorize('mentee'), getActiveTimerController);
+
+router.post(
+  '/:id/time/start',
+  authorize('mentee'),
+  validate(taskIdParamSchema),
+  startTimerController
+);
+
+router.post(
+  '/:id/time/stop',
+  authorize('mentee'),
+  validate(taskIdParamSchema),
+  stopTimerController
+);
+
+router.get(
+  '/:id/time',
+  authorize('admin', 'mentor', 'mentee'),
+  validate(taskIdParamSchema),
+  getTaskTimeController
 );
 
 // Submit task work (Assigned Mentee only)
