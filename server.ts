@@ -18,12 +18,9 @@ import './src/models/chat';
 import './src/models/taskTimeLog';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
-<<<<<<< HEAD
 import taskSubmissionRoutes from './src/routes/taskSubmissionRoutes';
-=======
 
 
->>>>>>> feat/TaskTimerImplemented
 // Routes
 import userRoutes from './src/routes/userRoute';
 import taskRoutes from './src/routes/taskRoutes';
