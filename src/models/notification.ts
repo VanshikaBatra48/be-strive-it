@@ -17,7 +17,9 @@ export type NotificationType =
   | "TASK_STATUS_CHANGED"
   | "TASK_CHANGE_REQUEST"
   | "EVALUATION_SUBMITTED"
-  | "NEW_MESSAGE";
+  | "NEW_MESSAGE"
+  | 'GROUP_CREATED'
+  | 'ADDED_TO_GROUP';
 
 export class Notification extends Model<
   InferAttributes<Notification>,

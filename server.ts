@@ -15,9 +15,15 @@ import './src/models/resetPassword';
 import './src/models/refreshToken';
 import './src/models/notification';
 import './src/models/chat';
+import './src/models/taskTimeLog';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
+<<<<<<< HEAD
 import taskSubmissionRoutes from './src/routes/taskSubmissionRoutes';
+=======
+
+
+>>>>>>> feat/TaskTimerImplemented
 // Routes
 import userRoutes from './src/routes/userRoute';
 import taskRoutes from './src/routes/taskRoutes';
@@ -29,6 +35,7 @@ import { authenticate } from './src/middleware/authMiddleware';
 import { initSocket } from './src/socket';
 import { startDueDateJob } from './src/jobs/dueDateJob';
 import chatRoutes from './src/routes/chatRoutes';
+import { startStaleTimerJob } from './src/jobs/closeStaleTimers';
 
 initAssociations();
 
@@ -112,6 +119,7 @@ async function startServer(): Promise<Server | undefined> {
   try {
     // Connect to PostgreSQL
     await connectDB();
+    startStaleTimerJob();
 
     // Clean up expired refresh tokens on startup
     void deleteExpiredTokens().catch((err) => {

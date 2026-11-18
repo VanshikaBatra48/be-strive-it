@@ -32,45 +32,75 @@ const optionalUrlSchema = z.preprocess(
   httpUrlSchema.nullable().optional()
 );
 
-const optionalHoursSchema = z.preprocess(
-  (v) => (v === '' ? null : v),
-  z.coerce
-    .number()
-    .int('Estimated hours must be a whole number')
-    .positive('Estimated hours must be positive')
-    .max(1000)
-    .nullable()
-    .optional()
+// Estimated hours: whole number, 1-1000.
+const estimatedHoursValue = z.coerce
+  .number()
+  .int('Estimated hours must be a whole number')
+  .positive('Estimated hours must be positive')
+  .max(1000, 'Estimated hours cannot exceed 1000');
+
+// CREATE: optional. Missing / blank / null => undefined (the controller stores null).
+const estimatedHoursOnCreate = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : v),
+  estimatedHoursValue.optional()
 );
 
-// Fields a client is allowed to send when creating a task
-const taskBodyBase = z.object({
+// UPDATE: optional. Omitted => unchanged, null or "" => clear the estimate.
+const estimatedHoursOnUpdate = z.preprocess(
+  (v) => (v === '' ? null : v),
+  estimatedHoursValue.nullable().optional()
+);
+
+// Description may be empty when the mentor only attaches files.
+// "description OR at least one attachment" is enforced in the controller/service,
+// because files are not part of the body schema.
+const descriptionField = z.string().trim().max(10000, 'Description is too long');
+
+// Fields shared by create and update (no defaults here, so partial updates
+// never overwrite existing values with a default).
+const taskFields = {
   title: z.string().trim().min(3, 'Title must be at least 3 characters').max(255),
-  description: z.string().trim().min(1, 'Description is required').max(10000),
-  category: z.enum(TASK_CATEGORIES).default('upskill'),
-  priority: z.enum(TASK_PRIORITIES).default('medium'),
+  description: descriptionField,
+  category: z.enum(TASK_CATEGORIES),
+  priority: z.enum(TASK_PRIORITIES),
   start_date: z.coerce.date({ message: 'Valid start_date is required' }),
   due_date: z.coerce.date({ message: 'Valid due_date is required' }),
-  estimated_hours: optionalHoursSchema ,
   mentee_id: z.coerce.number().int().positive('Invalid mentee ID'),
-});
+};
 
 const dueAfterStart = {
   message: 'due_date must be on or after start_date',
   path: ['due_date'],
 };
 
-// POST /api/tasks
+// POST /api/tasks  (multipart/form-data: text fields + "attachments" files)
 export const createTaskSchema = z.object({
-  body: taskBodyBase.refine((t) => t.due_date >= t.start_date, dueAfterStart),
+  body: z
+    .object({
+      ...taskFields,
+      description: descriptionField.default(''),
+      category: taskFields.category.default('upskill'),
+      priority: taskFields.priority.default('medium'),
+      estimated_hours: estimatedHoursOnCreate,
+    })
+    .refine((t) => t.due_date >= t.start_date, dueAfterStart),
 });
 
 // PATCH /api/tasks/:id (every field optional, at least one required)
 export const updateTaskSchema = z.object({
   params: taskIdParams,
-  body: taskBodyBase
-    .partial()
-    .extend({ status: z.enum(TASK_STATUSES).optional() })
+  body: z
+    .object({
+      title: taskFields.title.optional(),
+      description: taskFields.description.optional(),
+      category: taskFields.category.optional(),
+      priority: taskFields.priority.optional(),
+      start_date: taskFields.start_date.optional(),
+      due_date: taskFields.due_date.optional(),
+      mentee_id: taskFields.mentee_id.optional(),
+      estimated_hours: estimatedHoursOnUpdate,
+      status: z.enum(TASK_STATUSES).optional(),
+    })
     .refine((t) => Object.keys(t).length > 0, {
       message: 'Provide at least one field to update',
     })
