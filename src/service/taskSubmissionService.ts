@@ -4,6 +4,12 @@ import { sequelize } from '../config/database';
 import Task from '../models/tasks';
 import TaskSubmission from '../models/taskSubmission';
 import User from '../models/user';
+import {
+  notifyTaskSubmitted,
+  notifyTaskChangeRequest,
+  notifyEvaluationSubmitted,
+  safeNotify,
+} from './notificationService';
 
 interface SubmitTaskInput {
   taskId: number;
@@ -99,9 +105,24 @@ export const submitTask = async (
       },
       { transaction }
     );
+
+    // Notify the assigned mentor
+    const mentee = await User.findByPk(submittedBy, { transaction });
+    await safeNotify(() =>
+      notifyTaskSubmitted(
+        Number(task.get('assigned_by')),
+        {
+          id: Number(task.id),
+          title: String(task.get('title')),
+        },
+        String(mentee?.get('name') || 'A mentee'),
+        transaction
+      )
+    );
     await transaction.commit();
 
     // TODO: Notify the assigned mentor about the new submission.
+   
     // Integrate this with your existing notification service.
 
     return {
@@ -189,6 +210,17 @@ export const requestChanges = async (
       { transaction }
     );
 
+    await safeNotify(() =>
+      notifyEvaluationSubmitted(
+        Number(task.get('mentee_id')),
+        {
+          id: Number(task.id),
+          title: String(task.get('title')),
+        },
+        null,
+        transaction
+      )
+    );
     await transaction.commit();
 
     return {
@@ -281,12 +313,23 @@ export const approveSubmission = async (
         { transaction }
       );
 
-      // Commit both updates together
-      await transaction.commit();
-
     // TODO: Update your main Task status if required.
-    // TODO: Notify the mentee about approval.
+    // Notify the mentee about approval
+      await safeNotify(() =>
+      notifyEvaluationSubmitted(
+        Number(task.get('mentee_id')),
+        {
+          id: Number(task.id),
+          title: String(task.get('title')),
+        },
+        null,
+        transaction
+      )
+    );
 
+    // Commit both updates together
+      await transaction.commit();
+      
     return {
       message: 'Task approved successfully',
       submission
