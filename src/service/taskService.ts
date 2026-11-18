@@ -200,7 +200,7 @@ export const createTask = async (
 
   const created = await Task.create({
     title: taskData.title.trim(),
-    description: taskData.description.trim(),
+    description: (taskData.description ?? '').trim(),
     category: taskData.category ?? 'upskill',
     priority: taskData.priority ?? 'medium',
     start_date: taskData.start_date,
@@ -322,6 +322,13 @@ export const updateTask = async (
   }
   if (updateData.status === 'submitted') {
     throw new ServiceError(400, 'Tasks can only be submitted by the assigned mentee');
+  }
+  if (
+    updateData.estimated_hours !== undefined &&
+    updateData.estimated_hours !== null &&
+    (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
+  ) {
+    throw new ServiceError(400, 'Estimated hours must be greater than zero');
   }
 
   const startDate = updateData.start_date ?? task.start_date;
