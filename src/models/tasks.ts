@@ -21,7 +21,7 @@ class Task extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   declare priority: CreationOptional<TaskPriority>;
   declare start_date: Date;
   declare due_date: Date;
-  declare estimated_hours: number;
+  declare estimated_hours: CreationOptional<number | null>;
   declare mentee_id: number;
   declare assigned_by: number;
   declare status: CreationOptional<TaskStatus>;
@@ -82,7 +82,7 @@ Task.init(
     },
     estimated_hours: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
     },
     mentee_id: {
       type: DataTypes.INTEGER,

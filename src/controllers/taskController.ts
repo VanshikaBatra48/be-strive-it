@@ -64,7 +64,7 @@ export const createTaskController = async (
       priority?: TaskPriority;
       start_date: Date;
       due_date: Date;
-      estimated_hours: number;
+      estimated_hours: number | null;
       mentee_id: number;
     };
 
@@ -76,7 +76,10 @@ export const createTaskController = async (
         priority,
         start_date: new Date(start_date),
         due_date: new Date(due_date),
-        estimated_hours: Number(estimated_hours),
+        estimated_hours:
+         estimated_hours === null || estimated_hours === undefined || String(estimated_hours).trim() === ''
+        ? null
+        : Number(estimated_hours),
         mentee_id: Number(mentee_id),
         assigned_by: actor.id,
       },
@@ -187,7 +190,12 @@ export const updateTaskController = async (
     if (priority !== undefined) updateData.priority = priority as TaskPriority;
     if (start_date !== undefined) updateData.start_date = new Date(String(start_date));
     if (due_date !== undefined) updateData.due_date = new Date(String(due_date));
-    if (estimated_hours !== undefined) updateData.estimated_hours = Number(estimated_hours);
+    if (estimated_hours !== undefined) {
+    updateData.estimated_hours =
+    estimated_hours === null || String(estimated_hours).trim() === ''
+      ? null
+      : Number(estimated_hours);
+}
     if (mentee_id !== undefined) updateData.mentee_id = Number(mentee_id);
     if (status !== undefined) updateData.status = status as TaskStatus;
 
@@ -226,6 +234,7 @@ export const updateTaskStatusController = async (
   } catch (error) {
     handleTaskError(error, res, next);
   }
+  
 };
 
 // SUBMIT TASK WORK (Assigned Mentee only)

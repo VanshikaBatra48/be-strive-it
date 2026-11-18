@@ -52,7 +52,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   start_date: Date;
   due_date: Date;
-  estimated_hours: number;
+  estimated_hours: number | null;
   mentee_id: number;
   assigned_by: number;
 }
@@ -188,9 +188,12 @@ export const createTask = async (
 ): Promise<Task> => {
   validateTaskDates(taskData.start_date, taskData.due_date);
 
-  if (!Number.isFinite(taskData.estimated_hours) || taskData.estimated_hours <= 0) {
-    throw new ServiceError(400, 'Estimated hours must be greater than zero');
-  }
+  if (
+  taskData.estimated_hours != null &&
+  (!Number.isFinite(taskData.estimated_hours) || taskData.estimated_hours <= 0)
+) {
+  throw new ServiceError(400, 'Estimated hours must be greater than zero');
+}
 
   await validateTargetMentee(taskData.mentee_id, actor);
 
@@ -325,11 +328,11 @@ export const updateTask = async (
   validateTaskDates(startDate, dueDate);
 
   if (
-    updateData.estimated_hours !== undefined &&
-    (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
-  ) {
-    throw new ServiceError(400, 'Estimated hours must be greater than zero');
-  }
+  updateData.estimated_hours != null &&
+  (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
+) {
+  throw new ServiceError(400, 'Estimated hours must be greater than zero');
+}
 
   if (updateData.mentee_id !== undefined && updateData.mentee_id !== task.mentee_id) {
     await validateTargetMentee(updateData.mentee_id, actor);

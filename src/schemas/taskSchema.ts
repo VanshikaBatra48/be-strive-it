@@ -32,6 +32,17 @@ const optionalUrlSchema = z.preprocess(
   httpUrlSchema.nullable().optional()
 );
 
+const optionalHoursSchema = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.coerce
+    .number()
+    .int('Estimated hours must be a whole number')
+    .positive('Estimated hours must be positive')
+    .max(1000)
+    .nullable()
+    .optional()
+);
+
 // Fields a client is allowed to send when creating a task
 const taskBodyBase = z.object({
   title: z.string().trim().min(3, 'Title must be at least 3 characters').max(255),
@@ -40,7 +51,7 @@ const taskBodyBase = z.object({
   priority: z.enum(TASK_PRIORITIES).default('medium'),
   start_date: z.coerce.date({ message: 'Valid start_date is required' }),
   due_date: z.coerce.date({ message: 'Valid due_date is required' }),
-  estimated_hours: z.coerce.number().int().positive('Estimated hours must be positive').max(1000),
+  estimated_hours: optionalHoursSchema ,
   mentee_id: z.coerce.number().int().positive('Invalid mentee ID'),
 });
 
