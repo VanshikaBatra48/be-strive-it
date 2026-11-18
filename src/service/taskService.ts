@@ -53,7 +53,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   start_date: Date;
   due_date: Date;
-  estimated_hours: number;
+  estimated_hours?: number | null;   // optional
   mentee_id: number;
   assigned_by: number;
 }
@@ -189,7 +189,12 @@ export const createTask = async (
 ): Promise<Task> => {
   validateTaskDates(taskData.start_date, taskData.due_date);
 
-  if (!Number.isFinite(taskData.estimated_hours) || taskData.estimated_hours <= 0) {
+  // Estimated hours is optional; validate only when provided
+  const estimatedHours = taskData.estimated_hours ?? null;
+  if (
+    estimatedHours !== null &&
+    (!Number.isFinite(estimatedHours) || estimatedHours <= 0)
+  ) {
     throw new ServiceError(400, 'Estimated hours must be greater than zero');
   }
 
@@ -197,12 +202,12 @@ export const createTask = async (
 
   const created = await Task.create({
     title: taskData.title.trim(),
-    description: taskData.description.trim(),
+    description: (taskData.description ?? '').trim(),
     category: taskData.category ?? 'upskill',
     priority: taskData.priority ?? 'medium',
     start_date: taskData.start_date,
     due_date: taskData.due_date,
-    estimated_hours: taskData.estimated_hours,
+    estimated_hours: estimatedHours,
     mentee_id: taskData.mentee_id,
     assigned_by: actor.id,
     status: 'in-progress',
@@ -320,17 +325,25 @@ export const updateTask = async (
   if (updateData.status === 'submitted') {
     throw new ServiceError(400, 'Tasks can only be submitted by the assigned mentee');
   }
+  if (
+    updateData.estimated_hours !== undefined &&
+    updateData.estimated_hours !== null &&
+    (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
+  ) {
+    throw new ServiceError(400, 'Estimated hours must be greater than zero');
+  }
 
   const startDate = updateData.start_date ?? task.start_date;
   const dueDate = updateData.due_date ?? task.due_date;
   validateTaskDates(startDate, dueDate);
 
   if (
-    updateData.estimated_hours !== undefined &&
-    (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
-  ) {
-    throw new ServiceError(400, 'Estimated hours must be greater than zero');
-  }
+  updateData.estimated_hours !== undefined &&
+  updateData.estimated_hours !== null &&
+  (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
+) {
+  throw new ServiceError(400, 'Estimated hours must be greater than zero');
+}
 
   if (updateData.mentee_id !== undefined && updateData.mentee_id !== task.mentee_id) {
     await validateTargetMentee(updateData.mentee_id, actor);
