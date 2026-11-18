@@ -9,14 +9,18 @@ export const MENTEE_TYPES: NotificationType[] = [
   'TASK_DUE_DATE',
   'TASK_CHANGE_REQUEST',
   'EVALUATION_SUBMITTED',
-  'NEW_MESSAGE'
+  'NEW_MESSAGE',
+  'GROUP_CREATED',
+  'ADDED_TO_GROUP'
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
   'TASK_UPDATED',
   'TASK_SUBMITTED',
   'TASK_STATUS_CHANGED',
-  'NEW_MESSAGE'
+  'NEW_MESSAGE',
+  'GROUP_CREATED'
+ 
 ];
 
 /* ---------- Core ---------- */
@@ -212,6 +216,34 @@ export const notifyTaskStatusChanged = (
     { transaction: tx }
   );
 
+  export const notifyMentorTaskDueDate = (
+  mentor_id: number,
+  menteeName: string,
+  task: TaskRef,
+  dueDate: Date,
+  kind: DueReminderKind = '24h',
+  tx?: Transaction
+) =>
+  createNotification(
+    {
+      user_id: mentor_id,
+      type: 'TASK_DUE_DATE',
+      title: kind === '1h'
+        ? 'Mentee task due within 1 hour'
+        : 'Mentee task due within 24 hours',
+
+      message: `${menteeName}'s task "${task.title}" is due on ${formatDueDate(dueDate)}`,
+
+      data: {
+        taskId: task.id,
+        menteeName,
+        dueDate: new Date(dueDate).toISOString(),
+        reminder: kind,
+      },
+    },
+    { transaction: tx }
+  );
+
 /* ---------- Read side (used by the controller) ---------- */
 export const listNotifications = (user_id: number, limit: number, offset: number) =>
   Notification.findAll({
@@ -268,3 +300,38 @@ export const notifyNewMessage = (
     },
     { transaction: tx }
   );
+
+
+  export const notifyGroupCreated = async (
+  userId: number,
+  groupId: number,
+  groupName: string
+) => {
+  return createNotification({
+    user_id: userId,
+    type: 'GROUP_CREATED',
+    title: 'New Group Created',
+    message: `You have been added to the group "${groupName}".`,
+    data: {
+      groupId,
+      groupName,
+    },
+  });
+};
+
+export const notifyMemberAddedToGroup = async (
+  userId: number,
+  groupId: number,
+  groupName: string
+) => {
+  return createNotification({
+    user_id: userId,
+    type: 'ADDED_TO_GROUP',
+    title: 'Added to Group',
+    message: `You have been added to the group "${groupName}".`,
+    data: {
+      groupId,
+      groupName,
+    },
+  });
+};

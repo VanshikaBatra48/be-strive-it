@@ -26,6 +26,7 @@ export async function connectDB(): Promise<void> {
   try {
     await sequelize.authenticate();
     console.log('PostgreSQL connected successfully!');
+    
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('Database connection failed:', message);

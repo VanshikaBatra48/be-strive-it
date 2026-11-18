@@ -4,6 +4,7 @@ import PasswordReset from './resetPassword';
 import RefreshToken from './refreshToken';
 import { Notification } from './notification';
 import TaskSubmission from './taskSubmission';
+import TaskTimeLog from './taskTimeLog';
 
 let initialized = false;
 
@@ -63,7 +64,12 @@ export function initAssociations(): void {
     as: 'reviewer'
   });
 
-    initialized = true;
-  }
+  Task.hasMany(TaskTimeLog, { foreignKey: 'task_id', as: 'timeLogs' });
+  TaskTimeLog.belongsTo(Task, { foreignKey: 'task_id', as: 'task' });
+  User.hasMany(TaskTimeLog, { foreignKey: 'user_id', as: 'timeLogs' });
+  TaskTimeLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+  initialized = true;
+}
 
 export default initAssociations;

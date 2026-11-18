@@ -24,6 +24,7 @@ import {
   removeUserFromTaskGroups,
   archiveTaskGroups,
 } from '../service/chatService';
+import { closeActiveLogForTask } from './timeLogService';
 
 // Ensure Sequelize associations are registered before any included queries
 initAssociations();
@@ -52,7 +53,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   start_date: Date;
   due_date: Date;
-  estimated_hours: number | null;
+  estimated_hours?: number | null;   // optional
   mentee_id: number;
   assigned_by: number;
 }
@@ -188,23 +189,25 @@ export const createTask = async (
 ): Promise<Task> => {
   validateTaskDates(taskData.start_date, taskData.due_date);
 
+  // Estimated hours is optional; validate only when provided
+  const estimatedHours = taskData.estimated_hours ?? null;
   if (
-  taskData.estimated_hours != null &&
-  (!Number.isFinite(taskData.estimated_hours) || taskData.estimated_hours <= 0)
-) {
-  throw new ServiceError(400, 'Estimated hours must be greater than zero');
-}
+    estimatedHours !== null &&
+    (!Number.isFinite(estimatedHours) || estimatedHours <= 0)
+  ) {
+    throw new ServiceError(400, 'Estimated hours must be greater than zero');
+  }
 
   await validateTargetMentee(taskData.mentee_id, actor);
 
   const created = await Task.create({
     title: taskData.title.trim(),
-    description: taskData.description.trim(),
+    description: (taskData.description ?? '').trim(),
     category: taskData.category ?? 'upskill',
     priority: taskData.priority ?? 'medium',
     start_date: taskData.start_date,
     due_date: taskData.due_date,
-    estimated_hours: taskData.estimated_hours,
+    estimated_hours: estimatedHours,
     mentee_id: taskData.mentee_id,
     assigned_by: actor.id,
     status: 'in-progress',
@@ -322,13 +325,21 @@ export const updateTask = async (
   if (updateData.status === 'submitted') {
     throw new ServiceError(400, 'Tasks can only be submitted by the assigned mentee');
   }
+  if (
+    updateData.estimated_hours !== undefined &&
+    updateData.estimated_hours !== null &&
+    (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
+  ) {
+    throw new ServiceError(400, 'Estimated hours must be greater than zero');
+  }
 
   const startDate = updateData.start_date ?? task.start_date;
   const dueDate = updateData.due_date ?? task.due_date;
   validateTaskDates(startDate, dueDate);
 
   if (
-  updateData.estimated_hours != null &&
+  updateData.estimated_hours !== undefined &&
+  updateData.estimated_hours !== null &&
   (!Number.isFinite(updateData.estimated_hours) || updateData.estimated_hours <= 0)
 ) {
   throw new ServiceError(400, 'Estimated hours must be greater than zero');
@@ -355,6 +366,14 @@ export const updateTask = async (
     ...sanitizedUpdates,
     ...(dueDateChanged ? { due_reminder_sent: false } : {}),
   });
+
+  if (
+    sanitizedUpdates.status === 'hold' ||
+    sanitizedUpdates.status === 'submitted' ||
+    sanitizedUpdates.status === 'complete'
+  ) {
+    await closeActiveLogForTask(task.id);
+  }
 
   // Reassignment handlers
   if (updateData.mentee_id !== undefined && updateData.mentee_id !== previousMenteeId) {
@@ -402,6 +421,9 @@ export const submitTask = async (
     submitted_at: new Date(),
     status: 'submitted',
   });
+
+  // Automatically close any running timer on this task
+  await closeActiveLogForTask(task.id);
 
   // Mentor gets TASK_SUBMITTED notification
   await safeNotify(() => notifyTaskSubmitted(task.assigned_by, task, actor.name));
@@ -493,6 +515,10 @@ export const updateTaskStatus = async (
   const previousStatus = task.status;
 
   await task.update({ status });
+
+  if (status === 'hold') {
+    await closeActiveLogForTask(task.id);
+  }
 
   if (actor.role === 'mentee' && previousStatus !== status) {
     await safeNotify(() =>
