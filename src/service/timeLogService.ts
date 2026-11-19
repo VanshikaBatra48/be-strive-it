@@ -2,6 +2,9 @@ import { Transaction } from 'sequelize';
 import { sequelize } from '../config/database';
 import Task from '../models/tasks';
 import TaskTimeLog from '../models/taskTimeLog';
+import { initAssociations } from '../models/associations';
+
+initAssociations();
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -93,21 +96,22 @@ export async function stopTimer(taskId: number, userId: number, note?: string) {
 
 // Call this inside your existing status-change transactions
 export async function closeActiveLogForTask(taskId: number, t?: Transaction) {
-  if (t) {
-    const active = await TaskTimeLog.findOne({
+  const closeAll = async (tx: Transaction) => {
+    const activeLogs = await TaskTimeLog.findAll({
       where: { task_id: taskId, ended_at: null },
-      transaction: t,
-      lock: t.LOCK.UPDATE,
+      transaction: tx,
+      lock: tx.LOCK.UPDATE,
     });
-    if (active) await closeLog(active, t);
+    for (const active of activeLogs) {
+      await closeLog(active, tx);
+    }
+  };
+
+  if (t) {
+    await closeAll(t);
   } else {
     await sequelize.transaction(async (tx) => {
-      const active = await TaskTimeLog.findOne({
-        where: { task_id: taskId, ended_at: null },
-        transaction: tx,
-        lock: tx.LOCK.UPDATE,
-      });
-      if (active) await closeLog(active, tx);
+      await closeAll(tx);
     });
   }
 }

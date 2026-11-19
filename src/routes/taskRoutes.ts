@@ -46,6 +46,9 @@ router.post(
 // Get all tasks (role-scoped)
 router.get('/', validate(listTasksQuerySchema), getAllTasksController);
 
+// Time tracking active timer (placed before /:id so it is never matched as a param)
+router.get('/time/active', authorize('mentee'), getActiveTimerController);
+
 // Get a particular task (role-scoped)
 router.get('/:id', validate(taskIdParamSchema), getTaskByIdController);
 
@@ -65,7 +68,6 @@ router.patch(
   updateTaskStatusController
 );
 // Time tracking
-router.get('/time/active', authorize('mentee'), getActiveTimerController);
 
 router.post(
   '/:id/time/start',

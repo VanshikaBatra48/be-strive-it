@@ -10,6 +10,7 @@ import {
   notifyEvaluationSubmitted,
   safeNotify,
 } from './notificationService';
+import { closeActiveLogForTask } from './timeLogService';
 
 interface SubmitTaskInput {
   taskId: number;
@@ -105,6 +106,9 @@ export const submitTask = async (
       },
       { transaction }
     );
+
+    // Automatically close any running timer on this task
+    await closeActiveLogForTask(taskId, transaction);
 
     // Notify the assigned mentor
     const mentee = await User.findByPk(submittedBy, { transaction });
@@ -312,6 +316,9 @@ export const approveSubmission = async (
         },
         { transaction }
       );
+
+      // Automatically close any running timer on this task
+      await closeActiveLogForTask(Number(task.id), transaction);
 
     // TODO: Update your main Task status if required.
     // Notify the mentee about approval

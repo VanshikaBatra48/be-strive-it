@@ -71,8 +71,6 @@ app.use('/api', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api', passwordResetRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/tasks', taskRoutes);
 
 app.use('/api', taskSubmissionRoutes);
 

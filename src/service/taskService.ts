@@ -367,6 +367,14 @@ export const updateTask = async (
     ...(dueDateChanged ? { due_reminder_sent: false } : {}),
   });
 
+  if (
+    sanitizedUpdates.status === 'hold' ||
+    sanitizedUpdates.status === 'submitted' ||
+    sanitizedUpdates.status === 'complete'
+  ) {
+    await closeActiveLogForTask(task.id);
+  }
+
   // Reassignment handlers
   if (updateData.mentee_id !== undefined && updateData.mentee_id !== previousMenteeId) {
     await safeNotify(() => notifyTaskAssigned(task.mentee_id, task, actor.name));
