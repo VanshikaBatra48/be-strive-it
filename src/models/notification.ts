@@ -19,7 +19,10 @@ export type NotificationType =
   | "EVALUATION_SUBMITTED"
   | "NEW_MESSAGE"
   | 'GROUP_CREATED'
-  | 'ADDED_TO_GROUP';
+  | 'ADDED_TO_GROUP'
+  | "BLOCKER_RAISED"
+  | "BLOCKER_MESSAGE"
+  | "BLOCKER_RESOLVED"
 
 export class Notification extends Model<
   InferAttributes<Notification>,

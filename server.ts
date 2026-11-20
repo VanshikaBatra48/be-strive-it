@@ -19,6 +19,7 @@ import './src/models/taskTimeLog';
 import { initAssociations } from './src/models/associations';
 import { deleteExpiredTokens } from './src/service/tokenService';
 import taskSubmissionRoutes from './src/routes/taskSubmissionRoutes';
+import taskBlockerRoutes from './src/routes/taskBlockerRoute';
 
 
 // Routes
@@ -73,6 +74,7 @@ app.use('/api', passwordResetRoutes);
 app.use('/api/chat', chatRoutes);
 
 app.use('/api', taskSubmissionRoutes);
+app.use('/api/blockers', taskBlockerRoutes);
 
 // Health / root route
 app.get('/', (_req: Request, res: Response) => {

@@ -13,6 +13,7 @@ export const TASK_STATUSES = [
   'needs-revision',
   'complete',
   'hold',
+  'blocker'
 ] as const;
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high'] as const;

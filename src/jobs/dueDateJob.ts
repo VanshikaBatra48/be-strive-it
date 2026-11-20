@@ -12,7 +12,7 @@ import {
 
 const HOUR = 60 * 60 * 1000;
 
-const FINISHED_STATUSES = ['submitted', 'complete', 'hold'];
+const FINISHED_STATUSES = ['submitted', 'complete', 'hold','blocker'];
 
 let running = false;
 

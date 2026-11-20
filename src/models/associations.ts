@@ -5,6 +5,8 @@ import RefreshToken from './refreshToken';
 import { Notification } from './notification';
 import TaskSubmission from './taskSubmission';
 import TaskTimeLog from './taskTimeLog';
+import TaskBlockerConversation from './taskBlockerConversation';
+import TaskBlockerMessage from './taskBlockerMessage';
 
 let initialized = false;
 
@@ -84,6 +86,80 @@ export function initAssociations(): void {
   TaskTimeLog.belongsTo(Task, { foreignKey: 'task_id', as: 'task' });
   User.hasMany(TaskTimeLog, { foreignKey: 'user_id', as: 'timeLogs' });
   TaskTimeLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+  // =====================================
+  // TASK BLOCKER CONVERSATION ASSOCIATIONS
+  // =====================================
+
+  // One Task has one blocker conversation
+ Task.hasMany(TaskBlockerConversation, {
+  foreignKey: 'taskId',
+  as: 'blockerConversations',
+  onDelete: 'CASCADE',
+});
+
+  TaskBlockerConversation.belongsTo(Task, {
+    foreignKey: 'taskId',
+    as: 'task',
+  });
+
+  // =====================================
+  // CONVERSATION AND MESSAGE ASSOCIATIONS
+  // =====================================
+
+  // One conversation has many messages
+  TaskBlockerConversation.hasMany(TaskBlockerMessage, {
+    foreignKey: 'conversationId',
+    as: 'messages',
+    onDelete: 'CASCADE',
+  });
+
+  TaskBlockerMessage.belongsTo(TaskBlockerConversation, {
+    foreignKey: 'conversationId',
+    as: 'conversation',
+  });
+
+  // =====================================
+  // USER AND CONVERSATION ASSOCIATIONS
+  // =====================================
+
+  // Conversation belongs to a mentee
+  User.hasMany(TaskBlockerConversation, {
+    foreignKey: 'menteeId',
+    as: 'raisedBlockers',
+  });
+
+  TaskBlockerConversation.belongsTo(User, {
+    foreignKey: 'menteeId',
+    as: 'mentee',
+  });
+
+  // Conversation belongs to a mentor
+  User.hasMany(TaskBlockerConversation, {
+    foreignKey: 'mentorId',
+    as: 'assignedBlockerConversations',
+  });
+
+  TaskBlockerConversation.belongsTo(User, {
+    foreignKey: 'mentorId',
+    as: 'mentor',
+  });
+
+  // =====================================
+  // USER AND MESSAGE ASSOCIATIONS
+  // =====================================
+
+  // One user can send many blocker messages
+  User.hasMany(TaskBlockerMessage, {
+    foreignKey: 'senderId',
+    as: 'sentBlockerMessages',
+  });
+
+  TaskBlockerMessage.belongsTo(User, {
+    foreignKey: 'senderId',
+    as: 'sender',
+  });
+
 
   initialized = true;
 }
