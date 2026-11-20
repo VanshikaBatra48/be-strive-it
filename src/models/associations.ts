@@ -92,11 +92,11 @@ export function initAssociations(): void {
   // =====================================
 
   // One Task has one blocker conversation
-  Task.hasOne(TaskBlockerConversation, {
-    foreignKey: 'taskId',
-    as: 'blockerConversation',
-    onDelete: 'CASCADE',
-  });
+ Task.hasMany(TaskBlockerConversation, {
+  foreignKey: 'taskId',
+  as: 'blockerConversations',
+  onDelete: 'CASCADE',
+});
 
   TaskBlockerConversation.belongsTo(Task, {
     foreignKey: 'taskId',

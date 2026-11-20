@@ -1,72 +1,71 @@
-
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 import {
   raiseBlocker,
   sendBlockerMessage,
+  listBlockers,
+  getBlockerById,
   getBlockerConversation,
   getBlockerMessages,
   resolveBlocker,
 } from '../service/taskBlockerService';
-
-
-export const someController = async (
-  req: Request,
-  res: Response
-) => {
-  const userId = req.user?.id;
-  const userRole = req.user?.role;
-};
+import type { AuthUser } from '../service/taskBlockerService';
 
 interface ControllerError extends Error {
   statusCode?: number;
 }
 
-// Common error handler
 const handleError = (res: Response, error: unknown) => {
   const err = error as ControllerError;
 
-  console.error('Task blocker error:', err);
+  // Two simultaneous "raise" requests hit the unique index
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({
+      success: false,
+      message: 'An open blocker already exists for this task',
+    });
+  }
 
-  return res.status(err.statusCode || 500).json({
+  const status = err.statusCode || 500;
+  if (status >= 500) console.error('Task blocker error:', err);
+
+  return res.status(status).json({
     success: false,
-    message: err.message || 'Internal server error',
+    // Never leak internal/database messages on server errors
+    message: status >= 500 ? 'Internal server error' : err.message,
   });
 };
 
-// Validate logged-in user
-const getUserId = (req: Request): number => {
-  const userId = Number(req.user?.id);
+const getAuthUser = (req: Request): AuthUser => {
+  const id = Number(req.user?.id);
+  const role = req.user?.role;
 
-  if (!Number.isInteger(userId) || userId <= 0) {
-    throw new Error('Invalid or missing authenticated user');
+  if (!Number.isInteger(id) || id <= 0 || !role) {
+    const error = new Error('Authentication required') as ControllerError;
+    error.statusCode = 401;
+    throw error;
   }
-
-  return userId;
+  return { id, role };
 };
 
-// 1. Raise blocker
-export const raiseTaskBlocker = async (
-  req: Request,
-  res: Response
-) => {
+const parseId = (value: unknown, label: string): number => {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    const error = new Error(`Invalid ${label}`) as ControllerError;
+    error.statusCode = 400;
+    throw error;
+  }
+  return id;
+};
+
+// POST /api/blockers   (taskId in body)
+// POST /api/blockers/tasks/:taskId
+export const raiseTaskBlocker = async (req: Request, res: Response) => {
   try {
-    const taskId = Number(req.params.taskId);
-    const menteeId = getUserId(req);
-    const { message } = req.body;
+    const user = getAuthUser(req);
+    const taskId = parseId(req.params.taskId ?? req.body?.taskId, 'task ID');
 
-    if (!Number.isInteger(taskId) || taskId <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid task ID',
-      });
-    }
-
-    const result = await raiseBlocker(
-      taskId,
-      menteeId,
-      message
-    );
+    const result = await raiseBlocker(taskId, user.id, req.body?.message);
 
     return res.status(201).json({
       success: true,
@@ -82,126 +81,90 @@ export const raiseTaskBlocker = async (
   }
 };
 
-// 2. Get conversation for a task
-export const getTaskBlockerConversation = async (
-  req: Request,
-  res: Response
-) => {
+// GET /api/blockers?status=open|resolved
+export const listTaskBlockers = async (req: Request, res: Response) => {
   try {
-    const taskId = Number(req.params.taskId);
-    const userId = getUserId(req);
+    const user = getAuthUser(req);
+    const status =
+      typeof req.query.status === 'string' ? req.query.status : undefined;
 
-    if (!Number.isInteger(taskId) || taskId <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid task ID',
-      });
-    }
-
-    const conversation = await getBlockerConversation(
-      taskId,
-      userId
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: conversation,
-    });
+    const blockers = await listBlockers(user, status);
+    return res.status(200).json({ success: true, data: blockers });
   } catch (error) {
     return handleError(res, error);
   }
 };
 
-// 3. Get conversation messages
-export const getTaskBlockerMessages = async (
-  req: Request,
-  res: Response
-) => {
+// GET /api/blockers/:conversationId
+export const getTaskBlockerById = async (req: Request, res: Response) => {
   try {
-    const conversationId = Number(req.params.conversationId);
-    const userId = getUserId(req);
+    const user = getAuthUser(req);
+    const conversationId = parseId(req.params.conversationId, 'conversation ID');
 
+    const conversation = await getBlockerById(conversationId, user);
+    return res.status(200).json({ success: true, data: conversation });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// GET /api/blockers/tasks/:taskId
+export const getTaskBlockerConversation = async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const taskId = parseId(req.params.taskId, 'task ID');
+
+    const conversation = await getBlockerConversation(taskId, user);
+    return res.status(200).json({ success: true, data: conversation });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// GET /api/blockers/:conversationId/messages
+export const getTaskBlockerMessages = async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const conversationId = parseId(req.params.conversationId, 'conversation ID');
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
 
-    if (
-      !Number.isInteger(conversationId) ||
-      conversationId <= 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid conversation ID',
-      });
-    }
-
-    const result = await getBlockerMessages(
-      conversationId,
-      userId,
-      page,
-      limit
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: result,
-    });
+    const result = await getBlockerMessages(conversationId, user, page, limit);
+    return res.status(200).json({ success: true, data: result });
   } catch (error) {
     return handleError(res, error);
   }
 };
 
-// 4. Send a message
-export const sendTaskBlockerMessage = async (
-  req: Request,
-  res: Response
-) => {
+// POST /api/blockers/:conversationId/messages
+export const sendTaskBlockerMessage = async (req: Request, res: Response) => {
   try {
-    const conversationId = Number(req.params.conversationId);
-    const senderId = getUserId(req);
-    const { message } = req.body;
-
-    if (
-      !Number.isInteger(conversationId) ||
-      conversationId <= 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid conversation ID',
-      });
-    }
+    const user = getAuthUser(req);
+    const conversationId = parseId(req.params.conversationId, 'conversation ID');
 
     const result = await sendBlockerMessage(
       conversationId,
-      senderId,
-      message
+      user.id,
+      req.body?.message
     );
 
     return res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      data: {
-        message: result.message,
-        recipientId: result.recipientId,
-      },
+      data: { message: result.message, recipientId: result.recipientId },
     });
   } catch (error) {
     return handleError(res, error);
   }
 };
 
-// 5. Resolve blocker
-export const resolveTaskBlocker = async (
-  req: Request,
-  res: Response
-) => {
+// PATCH /api/blockers/:conversationId/resolve
+export const resolveTaskBlocker = async (req: Request, res: Response) => {
   try {
-    const conversationId = Number(req.params.conversationId);
-    const userId = getUserId(req);
+    const user = getAuthUser(req);
+    const conversationId = parseId(req.params.conversationId, 'conversation ID');
 
-    const result = await resolveBlocker(
-      conversationId,
-      userId
-    );
+    const result = await resolveBlocker(conversationId, user);
 
     return res.status(200).json({
       success: true,
@@ -212,7 +175,6 @@ export const resolveTaskBlocker = async (
         recipientId: result.mentorId,
       },
     });
-
   } catch (error) {
     return handleError(res, error);
   }

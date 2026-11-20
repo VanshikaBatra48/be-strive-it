@@ -1,49 +1,44 @@
-
 import { Router } from 'express';
 
 import {
   raiseTaskBlocker,
+  listTaskBlockers,
+  getTaskBlockerById,
   getTaskBlockerConversation,
   getTaskBlockerMessages,
   sendTaskBlockerMessage,
   resolveTaskBlocker,
 } from '../controllers/taskBlockerController';
 
-import { authenticate } from '../middleware/authMiddleware';
+import { authenticate, authorize } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// All blocker routes require authentication
+// Every blocker route requires a logged-in user
 router.use(authenticate);
 
-// Raise a blocker for a task
-router.post(
-  '/tasks/:taskId',
-  raiseTaskBlocker
-);
+// List blockers (mentee: own, mentor: assigned, admin: all)
+router.get('/', listTaskBlockers);
 
-// Get the blocker conversation for a task
-router.get(
-  '/tasks/:taskId',
-  getTaskBlockerConversation
-);
+// Raise a blocker: mentees only
+router.post('/', authorize('mentee'), raiseTaskBlocker);
+router.post('/tasks/:taskId', authorize('mentee'), raiseTaskBlocker);
 
-// Get messages with pagination
-router.get(
-  '/:conversationId/messages',
-  getTaskBlockerMessages
-);
+// Latest conversation for a task
+router.get('/tasks/:taskId', getTaskBlockerConversation);
 
-// Send a message
+// Messages
+router.get('/:conversationId/messages', getTaskBlockerMessages);
 router.post(
   '/:conversationId/messages',
+  authorize('mentee', 'mentor'),
   sendTaskBlockerMessage
 );
 
-// Resolve a blocker
-router.patch(
-  '/:conversationId/resolve',
-  resolveTaskBlocker
-);
+// Resolve: mentees only (a mentor gets 403 here)
+router.patch('/:conversationId/resolve', authorize('mentee'), resolveTaskBlocker);
+
+// One conversation with details and messages (keep this LAST)
+router.get('/:conversationId', getTaskBlockerById);
 
 export default router;

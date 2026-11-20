@@ -2,8 +2,10 @@
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up (queryInterface, Sequelize) {
-     // 1. Create TaskBlockerConversations table
+  async up(queryInterface, Sequelize) {
+    const { DataTypes } = Sequelize;
+
+    // 1. Create TaskBlockerConversations
     await queryInterface.createTable('TaskBlockerConversations', {
       id: {
         type: DataTypes.INTEGER,
@@ -16,7 +18,7 @@ module.exports = {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'Tasks',
+          model: 'tasks',
           key: 'id',
         },
         onUpdate: 'CASCADE',
@@ -27,7 +29,7 @@ module.exports = {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'Users',
+          model: 'users',
           key: 'id',
         },
         onUpdate: 'CASCADE',
@@ -38,7 +40,7 @@ module.exports = {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'Users',
+          model: 'users',
           key: 'id',
         },
         onUpdate: 'CASCADE',
@@ -64,7 +66,7 @@ module.exports = {
       },
     });
 
-    // 2. Create TaskBlockerMessages table
+    // 2. Create TaskBlockerMessages
     await queryInterface.createTable('TaskBlockerMessages', {
       id: {
         type: DataTypes.INTEGER,
@@ -88,7 +90,7 @@ module.exports = {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'Users',
+          model: 'users',
           key: 'id',
         },
         onUpdate: 'CASCADE',
@@ -107,8 +109,7 @@ module.exports = {
       },
     });
 
-    // 3. Add indexes for faster fetching
-
+    // 3. Add indexes
     await queryInterface.addIndex(
       'TaskBlockerConversations',
       ['taskId'],
@@ -123,19 +124,16 @@ module.exports = {
       {
         name: 'task_blocker_conversations_participants_status_idx',
       }
-    )
-    
+    );
   },
 
-  async down (queryInterface, Sequelize) {
-    // Drop messages first because they reference conversations
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('TaskBlockerMessages');
 
     await queryInterface.dropTable('TaskBlockerConversations');
 
-    // Remove PostgreSQL ENUM type
     await queryInterface.sequelize.query(
       'DROP TYPE IF EXISTS "enum_TaskBlockerConversations_status";'
     );
-  }
+  },
 };

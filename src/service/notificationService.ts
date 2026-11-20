@@ -11,7 +11,8 @@ export const MENTEE_TYPES: NotificationType[] = [
   'EVALUATION_SUBMITTED',
   'NEW_MESSAGE',
   'GROUP_CREATED',
-  'ADDED_TO_GROUP'
+  'ADDED_TO_GROUP',
+  'BLOCKER_MESSAGE'
 ];
 
 export const MENTOR_TYPES: NotificationType[] = [
@@ -19,7 +20,10 @@ export const MENTOR_TYPES: NotificationType[] = [
   'TASK_SUBMITTED',
   'TASK_STATUS_CHANGED',
   'NEW_MESSAGE',
-  'GROUP_CREATED'
+  'GROUP_CREATED',
+  'BLOCKER_RAISED',    // mentee raised a blocker
+  'BLOCKER_MESSAGE',   // mentee replied
+  'BLOCKER_RESOLVED',  // mentee resolved it
  
 ];
 
@@ -35,6 +39,20 @@ export interface NewNotification {
 interface TaskRef {
   id: number;
   title: string;
+}
+
+
+interface BlockerNotificationData {
+  recipientId: number;
+  senderId: number;
+  conversationId: number;
+  taskId: number;
+  title: string;
+  message: string;
+  type: Extract<
+    NotificationType,
+    'BLOCKER_RAISED' | 'BLOCKER_MESSAGE' | 'BLOCKER_RESOLVED'
+  >;
 }
 
 export async function createNotification(
@@ -335,3 +353,23 @@ export const notifyMemberAddedToGroup = async (
     },
   });
 };
+
+
+export const createBlockerNotification = (
+  data: BlockerNotificationData,
+  transaction?: Transaction
+) =>
+  createNotification(
+    {
+      user_id: data.recipientId,
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      data: {
+        senderId: data.senderId,
+        conversationId: data.conversationId,
+        taskId: data.taskId,
+      },
+    },
+    { transaction }
+  );
