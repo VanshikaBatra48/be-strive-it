@@ -492,8 +492,8 @@ export const updateTaskStatus = async (
     if (task.status === 'submitted' || task.status === 'complete' || task.status === 'needs-revision') {
       throw new ServiceError(400, `Cannot change status when task is ${task.status}`);
     }
-    if (status !== 'in-progress' && status !== 'hold') {
-      throw new ServiceError(400, 'Mentees can only set status to in-progress or hold');
+    if (status !== 'in-progress' && status !== 'hold' && status !== 'blocker') {
+      throw new ServiceError(400, 'Mentees can only set status to in-progress , hold or blocker');
     }
   } else {
     await assertMentorCanAccess(task, actor);
