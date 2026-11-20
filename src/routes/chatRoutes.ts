@@ -24,7 +24,7 @@ router.post('/groups/:groupId/archive', authorize('admin', 'mentor'), chatContro
 // ---- Messages ----
 router.get('/groups/:groupId/messages', chatController.getMessages);
 router.patch('/groups/:groupId', authorize('admin', 'mentor'), chatController.renameGroup);
-router.delete('/groups/:groupId', authorize('admin', 'mentor'), chatController.deleteGroup);
+router.delete('/groups/:groupId', authorize('admin'), chatController.deleteGroup);
 // Order matters: membership check -> upload -> controller
 router.post('/groups/:groupId/messages', ensureCanPost, uploadFiles, chatController.sendMessage);
 router.delete('/groups/:groupId/messages/:messageId', chatController.deleteMessage);

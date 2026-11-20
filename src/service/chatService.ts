@@ -293,7 +293,7 @@ export async function listGroups(actor: Actor) {
   return items.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
-/** Admin only: group metadata for management. NEVER includes messages. */
+/** Admin only: group metadata for management with last message preview. */
 export async function listAllGroups(actor: Actor) {
   if (actor.role !== 'admin') throw new ChatError('Admins only', 403);
   const groups = await ChatGroup.findAll({ order: [['createdAt', 'DESC']] });
@@ -302,16 +302,21 @@ export async function listAllGroups(actor: Actor) {
   );
 
   return Promise.all(
-    groups.map(async (g) => ({
-      id: g.id,
-      name: g.name,
-      description: g.description,
-      taskId: g.taskId,
-      status: g.status,
-      myRole: mine.get(g.id)?.role ?? null,
-      memberCount: await ChatMember.count({ where: { groupId: g.id, leftAt: null } }),
-      lastActivityAt: g.createdAt.toISOString(),
-    }))
+    groups.map(async (g) => {
+      const last = await ChatMessage.findOne({ where: { groupId: g.id }, order: [['id', 'DESC']] });
+      const attachments = last ? await loadAttachments([last.id]) : new Map();
+      return {
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        taskId: g.taskId,
+        status: g.status,
+        myRole: mine.get(g.id)?.role ?? null,
+        memberCount: await ChatMember.count({ where: { groupId: g.id, leftAt: null } }),
+        lastMessage: last ? serializeMessage(last, attachments.get(last.id)) : null,
+        lastActivityAt: (last?.createdAt ?? g.createdAt).toISOString(),
+      };
+    })
   );
 }
 
@@ -453,10 +458,16 @@ export async function renameGroup(actor: Actor, groupId: number, newName: string
 }
 /**
  * Permanently deletes a group and its files.
- * Allowed: Admin or Group Owner.
+ * Allowed: ONLY Admin, and ONLY once the group is archived.
  */
 export async function deleteGroup(actor: Actor, groupId: number) {
-  const { group } = await requireManager(actor, groupId);
+  if (actor.role !== 'admin') {
+    throw new ChatError('Only administrators can delete groups', 403);
+  }
+  const group = await getGroupOrThrow(groupId);
+  if (group.status !== 'archived') {
+    throw new ChatError('Only archived groups can be deleted', 400);
+  }
   // 1. Gather all file attachments on disk before DB cascade deletion
   const messages = await ChatMessage.findAll({
     where: { groupId },
@@ -495,7 +506,11 @@ export async function getMessages(
   groupId: number,
   opts: { before?: number; limit?: number } = {}
 ) {
-  await requireMember(groupId, actor.id);
+  if (actor.role === 'admin') {
+    await getGroupOrThrow(groupId);
+  } else {
+    await requireMember(groupId, actor.id);
+  }
 
   const take = Math.min(Math.max(opts.limit ?? 30, 1), 100);
   const where: Record<string, unknown> = { groupId };
@@ -511,7 +526,13 @@ export async function getMessages(
 
 /** Used BEFORE multer runs, so non-members can't even write files to disk. */
 export async function assertCanPost(actor: Actor, groupId: number) {
-  const { group } = await requireMember(groupId, actor.id);
+  let group: ChatGroup;
+  if (actor.role === 'admin') {
+    group = await getGroupOrThrow(groupId);
+  } else {
+    const res = await requireMember(groupId, actor.id);
+    group = res.group;
+  }
   if (group.status !== 'active') throw new ChatError('This group is archived and read-only', 409);
   return group;
 }
@@ -521,10 +542,8 @@ export async function sendMessage(
   groupId: number,
   input: { body?: string; files?: UploadedFile[] }
 ) {
-  //Check whether the sender is allowed to post
+  // Check whether the sender is allowed to post
   const group = await assertCanPost(actor, groupId);
-
-  await assertCanPost(actor, groupId);
 
   const body = (input.body ?? '').trim();
   const files = input.files ?? [];
@@ -645,7 +664,11 @@ export async function deleteMessage(actor: Actor, groupId: number, messageId: nu
 }
 
 export async function markRead(actor: Actor, groupId: number, messageId: number) {
-  const { member } = await requireMember(groupId, actor.id);
+  const member = await getActiveMembership(groupId, actor.id);
+  if (!member) {
+    if (actor.role === 'admin') return;
+    throw new ChatError('Group not found', 404);
+  }
   const msg = await ChatMessage.findOne({ where: { id: messageId, groupId } });
   if (!msg) throw new ChatError('Message not found', 404);
   if (!member.lastReadMessageId || messageId > member.lastReadMessageId) {
@@ -653,7 +676,7 @@ export async function markRead(actor: Actor, groupId: number, messageId: number)
   }
 }
 
-/** Authorise + locate an attachment. Only active group members may download. */
+/** Authorise + locate an attachment. Active group members or admins may download. */
 export async function getAttachmentFile(actor: Actor, attachmentId: number) {
   const att = await ChatAttachment.findByPk(attachmentId);
   if (!att || att.deletedAt) throw new ChatError('File not found', 404);
@@ -661,7 +684,11 @@ export async function getAttachmentFile(actor: Actor, attachmentId: number) {
   const msg = await ChatMessage.findByPk(att.messageId);
   if (!msg || msg.deletedAt) throw new ChatError('File not found', 404);
 
-  await requireMember(msg.groupId, actor.id);
+  if (actor.role === 'admin') {
+    await getGroupOrThrow(msg.groupId);
+  } else {
+    await requireMember(msg.groupId, actor.id);
+  }
 
   return {
     filePath: path.join(UPLOAD_DIR, path.basename(att.storedName)),

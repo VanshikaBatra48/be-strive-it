@@ -157,8 +157,7 @@ export function initSocket(
             return;
           }
 
-          // Verify that the user is an active member
-          // of the requested group
+          // Verify that the user is an active member or an admin
           const membership = await ChatMember.findOne({
             where: {
               groupId,
@@ -167,7 +166,7 @@ export function initSocket(
             },
           });
 
-          if (!membership) {
+          if (!membership && role !== "admin") {
             return;
           }
 
@@ -181,12 +180,24 @@ export function initSocket(
             await socket.leave(
               viewingGroupRoom(previousGroupId)
             );
+            if (role === "admin") {
+              const wasMember = await ChatMember.findOne({
+                where: { groupId: previousGroupId, userId: id, leftAt: null },
+              });
+              if (!wasMember) {
+                await socket.leave(groupRoom(previousGroupId));
+              }
+            }
           }
 
           // Join the currently viewed group
           await socket.join(
             viewingGroupRoom(groupId)
           );
+
+          if (role === "admin") {
+            await socket.join(groupRoom(groupId));
+          }
 
           socket.data.activeGroupId = groupId;
 
@@ -217,6 +228,15 @@ export function initSocket(
         await socket.leave(
           viewingGroupRoom(activeGroupId)
         );
+
+        if (role === "admin") {
+          const wasMember = await ChatMember.findOne({
+            where: { groupId: activeGroupId, userId: id, leftAt: null },
+          });
+          if (!wasMember) {
+            await socket.leave(groupRoom(activeGroupId));
+          }
+        }
 
         socket.data.activeGroupId = null;
 

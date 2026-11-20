@@ -44,7 +44,7 @@ const envOrigins = (process.env.CORS_ORIGINS || '')
   .filter(Boolean);
 
 const allowedOrigins: string[] = Array.from(
-  new Set(['http://localhost:5173', 'http://127.0.0.1:5173','http://192.168.1.32:5173' , ...envOrigins])
+  new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.31.242:5173', 'http://192.168.1.32:5173', ...envOrigins])
 );
 
 const corsOptions: CorsOptions = {

@@ -87,12 +87,12 @@ router.patch(
   userController.assignMentor
 );
 
-// Delete user (Admin or Mentor deleting own assigned mentee)
+// Delete user (Admin only - Mentors are not permitted to delete mentees)
 router.delete(
   '/users/delete/:id',
   verifyToken,
   checkFirstLogin,
-  authorize('admin', 'mentor'),
+  authorize('admin'),
   validate(getUserSchema),
   userController.deleteUser
 );

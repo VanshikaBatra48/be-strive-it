@@ -1063,24 +1063,7 @@ const userService = {
     }
 
     if (actor?.role === 'mentor') {
-      if (user.role !== 'mentee') {
-        throw new Error('FORBIDDEN:Mentors can only delete assigned mentees');
-      }
-
-      const mentorRecord = await User.findByPk(actor.id);
-      const mentorName = (mentorRecord?.name ?? actor.name).trim().toLowerCase();
-      const mentorMentees = normalizeMenteeIdList(
-        mentorRecord?.assignedMentees ?? actor.assignedMentees ?? []
-      );
-      const isOwnedByFk = user.mentor_id === actor.id;
-      const isOwnedByName = Boolean(
-        user.assigned_to && user.assigned_to.trim().toLowerCase() === mentorName
-      );
-      const isOwnedByArray = mentorMentees.includes(user.id);
-
-      if (!isOwnedByFk && !isOwnedByName && !isOwnedByArray) {
-        throw new Error('FORBIDDEN:You can only delete mentees assigned to you');
-      }
+      throw new Error('FORBIDDEN:Mentors are not allowed to delete mentees. Only administrators can delete users.');
     }
 
     if (user.role === 'mentee') {
