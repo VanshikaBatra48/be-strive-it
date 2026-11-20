@@ -145,7 +145,7 @@ export const notifyTaskChangeRequest = (
 export const notifyEvaluationSubmitted = (
   mentee_id: number,
   task: TaskRef,
-  score: number | null,
+  score?: number | null,
   tx?: Transaction
 ) =>
   createNotification(
@@ -153,11 +153,8 @@ export const notifyEvaluationSubmitted = (
       user_id: mentee_id,
       type: 'EVALUATION_SUBMITTED',
       title: 'Task evaluated',
-      message:
-        score !== null
-          ? `Your task "${task.title}" was evaluated. Score: ${score}/100`
-          : `Your task "${task.title}" was evaluated`,
-      data: { taskId: task.id, score },
+      message: `Your task "${task.title}" was evaluated.`,
+      data: { taskId: task.id },
     },
     { transaction: tx }
   );

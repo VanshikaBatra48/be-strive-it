@@ -87,7 +87,8 @@ export async function rotateRefreshToken(
         order: [['createdAt', 'DESC']],
       });
       if (activeRecord) {
-        return { userId: record.userId, newToken: '' };
+        const replacementToken = await createRefreshToken(record.userId, record.familyId);
+        return { userId: record.userId, newToken: replacementToken };
       }
     } else {
       // Old token replayed after grace window -> likely stolen. Kill the whole session family.

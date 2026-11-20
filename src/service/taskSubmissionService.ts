@@ -25,6 +25,25 @@ interface ReviewInput {
   feedback?: string;
 }
 
+async function canMentorAccessTask(mentorId: number, task: Task): Promise<boolean> {
+  if (Number(task.get('assigned_by')) === Number(mentorId)) {
+    return true;
+  }
+  const menteeId = Number(task.get('mentee_id'));
+  const mentee = await User.findByPk(menteeId);
+  if (mentee && Number(mentee.mentor_id) === Number(mentorId)) {
+    return true;
+  }
+  const mentor = await User.findByPk(mentorId);
+  if (mentor && Array.isArray(mentor.assignedMentees)) {
+    const list = mentor.assignedMentees.map(Number);
+    if (list.includes(menteeId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // -------------------------------------
 // 1. SUBMIT OR RESUBMIT TASK
 // -------------------------------------
@@ -190,9 +209,8 @@ export const requestChanges = async (
     }
 
     // Verify assigned mentor
-    if (
-      Number(task.get('assigned_by')) !== Number(mentorId)
-    ) {
+    const authorized = await canMentorAccessTask(Number(mentorId), task);
+    if (!authorized) {
       throw new Error(
         'You are not authorized to review this task'
       );
@@ -280,7 +298,8 @@ export const approveSubmission = async (
       throw new Error('Task not found');
     }
 
-    if (Number(task.get('assigned_by')) !== mentorId) {
+    const authorized = await canMentorAccessTask(Number(mentorId), task);
+    if (!authorized) {
       throw new Error(
         'You are not authorized to approve this task'
       );
@@ -372,9 +391,12 @@ export const getSubmissionHistory = async (
     throw new Error('You cannot access this task history');
   }
 
-  // Mentor can access only tasks assigned by them
-  if (role === 'mentor' && mentorId !== Number(userId)) {
-    throw new Error('You cannot access this task history');
+  // Mentor can access tasks assigned by them OR tasks of their assigned mentees
+  if (role === 'mentor') {
+    const authorized = await canMentorAccessTask(Number(userId), task);
+    if (!authorized) {
+      throw new Error('You cannot access this task history');
+    }
   }
 
   if (!['admin', 'mentor', 'mentee'].includes(role)) {
@@ -440,9 +462,12 @@ export const getSubmissionById = async (
     throw new Error('You cannot access this submission');
   }
 
-  // Mentor can access tasks assigned to them.
-  if (role === 'mentor' && assignedBy !== Number(userId)) {
-    throw new Error('You cannot access this submission');
+  // Mentor can access tasks assigned to them OR tasks of their assigned mentees.
+  if (role === 'mentor') {
+    const authorized = await canMentorAccessTask(Number(userId), task);
+    if (!authorized) {
+      throw new Error('You cannot access this submission');
+    }
   }
 
   if (!['admin', 'mentor', 'mentee'].includes(role)) {

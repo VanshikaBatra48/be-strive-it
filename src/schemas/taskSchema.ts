@@ -123,25 +123,17 @@ export const submitTaskSchema = z.object({
 // PATCH /api/tasks/:id/evaluate
 export const evaluateTaskSchema = z.object({
   params: taskIdParams,
-  body: z
-    .object({
-      score: z.coerce
-        .number()
-        .int('Score must be a whole number')
-        .min(0, 'Score must be between 0 and 100')
-        .max(100, 'Score must be between 0 and 100')
-        .nullable()
-        .optional(),
-      feedback: z.string().trim().min(1, 'Feedback is required').max(5000),
-      status: z.enum(['complete', 'needs-revision']).default('complete'),
-    })
-    .refine(
-      (data) => data.status !== 'complete' || (data.score !== undefined && data.score !== null),
-      {
-        message: 'Score (0-100) is required when marking a task complete',
-        path: ['score'],
-      }
-    ),
+  body: z.object({
+    score: z.coerce
+      .number()
+      .int('Score must be a whole number')
+      .min(0, 'Score must be between 0 and 100')
+      .max(100, 'Score must be between 0 and 100')
+      .nullable()
+      .optional(),
+    feedback: z.string().trim().min(1, 'Feedback is required').max(5000),
+    status: z.enum(['complete', 'needs-revision']).default('complete'),
+  }),
 });
 
 // PATCH /api/tasks/:id/status (Admin, owning Mentor, or assigned Mentee)

@@ -453,15 +453,8 @@ export const evaluateTask = async (
     );
   }
 
-  if (
-    input.status === 'complete' &&
-    (input.score === undefined || input.score === null)
-  ) {
-    throw new ServiceError(400, 'Score (0-100) is required when marking a task complete');
-  }
-
   await task.update({
-    score: input.score ?? null,
+    score: null,
     feedback: input.feedback.trim(),
     status: input.status,
     evaluated_by: actor.id,
@@ -472,7 +465,7 @@ export const evaluateTask = async (
     await safeNotify(() => notifyTaskChangeRequest(task.mentee_id, task));
   } else {
     await safeNotify(() =>
-      notifyEvaluationSubmitted(task.mentee_id, task, input.score ?? null)
+      notifyEvaluationSubmitted(task.mentee_id, task)
     );
   }
 
