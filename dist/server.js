@@ -19,6 +19,7 @@ require("./src/models/taskTimeLog");
 const associations_1 = require("./src/models/associations");
 const tokenService_1 = require("./src/service/tokenService");
 const taskSubmissionRoutes_1 = __importDefault(require("./src/routes/taskSubmissionRoutes"));
+const taskBlockerRoute_1 = __importDefault(require("./src/routes/taskBlockerRoute"));
 // Routes
 const userRoute_1 = __importDefault(require("./src/routes/userRoute"));
 const taskRoutes_1 = __importDefault(require("./src/routes/taskRoutes"));
@@ -60,6 +61,7 @@ app.use('/api/tasks', taskRoutes_1.default);
 app.use('/api', passwordResetRoutes_1.default);
 app.use('/api/chat', chatRoutes_1.default);
 app.use('/api', taskSubmissionRoutes_1.default);
+app.use('/api/blockers', taskBlockerRoute_1.default);
 // Health / root route
 app.get('/', (_req, res) => {
     res.json({ message: 'Intern Management System API is running!' });

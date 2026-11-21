@@ -3,9 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RefreshTokenError = exports.REFRESH_TTL_MS = exports.REFRESH_TTL_DAYS = exports.REFRESH_COOKIE_NAME = void 0;
+exports.hashToken = exports.RefreshTokenError = exports.REFRESH_TTL_MS = exports.REFRESH_TTL_DAYS = exports.REFRESH_COOKIE_BASE = void 0;
+exports.refreshCookieName = refreshCookieName;
 exports.setRefreshCookie = setRefreshCookie;
 exports.clearRefreshCookie = clearRefreshCookie;
+exports.clearAllRefreshCookies = clearAllRefreshCookies;
 exports.createRefreshToken = createRefreshToken;
 exports.rotateRefreshToken = rotateRefreshToken;
 exports.revokeRefreshToken = revokeRefreshToken;
@@ -14,7 +16,12 @@ exports.deleteExpiredTokens = deleteExpiredTokens;
 const crypto_1 = __importDefault(require("crypto"));
 const sequelize_1 = require("sequelize");
 const refreshToken_1 = __importDefault(require("../models/refreshToken"));
-exports.REFRESH_COOKIE_NAME = 'refreshToken';
+/** Base name — the actual cookie is `refreshToken_<userId>`. */
+exports.REFRESH_COOKIE_BASE = 'refreshToken';
+/** Build the per-user cookie name so each login gets its own cookie. */
+function refreshCookieName(userId) {
+    return `${exports.REFRESH_COOKIE_BASE}_${userId}`;
+}
 exports.REFRESH_TTL_DAYS = Number(process.env.REFRESH_TOKEN_DAYS) || 7;
 exports.REFRESH_TTL_MS = exports.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000;
 /** If a just-rotated token is replayed within this window (e.g. two tabs
@@ -28,6 +35,7 @@ class RefreshTokenError extends Error {
 }
 exports.RefreshTokenError = RefreshTokenError;
 const hashToken = (raw) => crypto_1.default.createHash('sha256').update(raw).digest('hex');
+exports.hashToken = hashToken;
 const generateRawToken = () => crypto_1.default.randomBytes(48).toString('hex');
 // ---------- Cookie helpers ----------
 function cookieOptions() {
@@ -40,14 +48,24 @@ function cookieOptions() {
         path: process.env.REFRESH_COOKIE_PATH || '/api',
     };
 }
-function setRefreshCookie(res, rawToken) {
-    res.cookie(exports.REFRESH_COOKIE_NAME, rawToken, {
+function setRefreshCookie(res, rawToken, userId) {
+    res.cookie(refreshCookieName(userId), rawToken, {
         ...cookieOptions(),
         maxAge: exports.REFRESH_TTL_MS,
     });
 }
-function clearRefreshCookie(res) {
-    res.clearCookie(exports.REFRESH_COOKIE_NAME, cookieOptions());
+function clearRefreshCookie(res, userId) {
+    res.clearCookie(refreshCookieName(userId), cookieOptions());
+}
+/** Clear every `refreshToken_*` cookie found in the request (used for logout-all). */
+function clearAllRefreshCookies(req, res) {
+    if (req.cookies) {
+        for (const name of Object.keys(req.cookies)) {
+            if (name.startsWith(`${exports.REFRESH_COOKIE_BASE}_`)) {
+                res.clearCookie(name, cookieOptions());
+            }
+        }
+    }
 }
 // ---------- Token lifecycle ----------
 /** Create a refresh token. Omit familyId on login to start a new family. */
@@ -55,7 +73,7 @@ async function createRefreshToken(userId, familyId = crypto_1.default.randomUUID
     const raw = generateRawToken();
     await refreshToken_1.default.create({
         userId,
-        tokenHash: hashToken(raw),
+        tokenHash: (0, exports.hashToken)(raw),
         familyId,
         expiresAt: new Date(Date.now() + exports.REFRESH_TTL_MS),
     });
@@ -67,7 +85,7 @@ async function createRefreshToken(userId, familyId = crypto_1.default.randomUUID
  */
 async function rotateRefreshToken(rawToken) {
     const record = await refreshToken_1.default.findOne({
-        where: { tokenHash: hashToken(rawToken) },
+        where: { tokenHash: (0, exports.hashToken)(rawToken) },
     });
     if (!record)
         throw new RefreshTokenError('Invalid refresh token');
@@ -103,7 +121,7 @@ async function rotateRefreshToken(rawToken) {
 }
 /** Revoke a single token (logout on this device). */
 async function revokeRefreshToken(rawToken) {
-    await refreshToken_1.default.update({ revokedAt: new Date() }, { where: { tokenHash: hashToken(rawToken), revokedAt: null } });
+    await refreshToken_1.default.update({ revokedAt: new Date() }, { where: { tokenHash: (0, exports.hashToken)(rawToken), revokedAt: null } });
 }
 /** Revoke every session for a user (password change, logout everywhere, deactivation). */
 async function revokeAllForUser(userId) {

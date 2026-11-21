@@ -23,7 +23,8 @@ export type TaskStatus =
 export interface TaskAttachment {
   id: string; // uuid
   name: string; // original file name
-  key: string; // storage key, e.g. tasks/42/<uuid>-spec.pdf
+  key?: string; // storage key, e.g. tasks/42/<uuid>-spec.pdf
+  url?: string; // imagekit cdn url
   size: number; // bytes
   type: string; // mime type
 }

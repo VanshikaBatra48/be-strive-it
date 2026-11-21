@@ -9,9 +9,12 @@ import type {
   ChangePasswordBody,
 } from '../schemas/userSchema';
 import User from '../models/user';
+import RefreshToken from '../models/refreshToken';
 import { generateAccessToken } from '../middleware/authMiddleware';
+import { closeActiveLogForUser } from '../service/timeLogService';
 import {
-  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_BASE,
+  refreshCookieName,
   RefreshTokenError,
   createRefreshToken,
   rotateRefreshToken,
@@ -19,6 +22,8 @@ import {
   revokeAllForUser,
   setRefreshCookie,
   clearRefreshCookie,
+  clearAllRefreshCookies,
+  hashToken,
 } from '../service/tokenService';
 
 // ---------- Helpers ----------
@@ -274,7 +279,7 @@ const userController = {
       const result = await userService.login(email, password);
 
       const refreshToken = await createRefreshToken(Number(result.user.id));
-      setRefreshCookie(res, refreshToken);
+      setRefreshCookie(res, refreshToken, result.user.id);
 
       res.status(200).json({
         success: true,
@@ -318,7 +323,26 @@ const userController = {
   // ==========================================
   async refresh(req: Request, res: Response): Promise<void> {
     try {
-      const rawToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
+      // The frontend sends the userId in the body so we know which
+      // per-user cookie to read (cookies are shared across tabs).
+      const requestedUserId: number | undefined =
+        req.body?.userId ? Number(req.body.userId) : undefined;
+
+      // Look for a per-user cookie first; fall back to the legacy
+      // shared cookie name for backwards compatibility.
+      let rawToken: string | undefined;
+      if (requestedUserId) {
+        rawToken = req.cookies?.[refreshCookieName(requestedUserId)];
+      }
+      // Fallback: try every refreshToken_* cookie present
+      if (!rawToken && req.cookies) {
+        for (const name of Object.keys(req.cookies)) {
+          if (name.startsWith(`${REFRESH_COOKIE_BASE}_`)) {
+            rawToken = req.cookies[name];
+            break;
+          }
+        }
+      }
 
       if (!rawToken) {
         res.status(401).json({
@@ -337,7 +361,7 @@ const userController = {
 
       if (!user || user.status !== 'active') {
         await revokeAllForUser(userId);
-        clearRefreshCookie(res);
+        clearRefreshCookie(res, userId);
         res.status(401).json({
           success: false,
           code: 'ACCOUNT_UNAVAILABLE',
@@ -347,7 +371,7 @@ const userController = {
       }
 
       if (newToken) {
-        setRefreshCookie(res, newToken);
+        setRefreshCookie(res, newToken, userId);
       }
 
       const accessToken = generateAccessToken({
@@ -365,7 +389,9 @@ const userController = {
         user: profile,
       });
     } catch (error) {
-      clearRefreshCookie(res);
+      // We can't clear a specific cookie here because we don't know
+      // which userId to target — clear all refresh cookies.
+      clearAllRefreshCookies(req, res);
 
       if (error instanceof RefreshTokenError) {
         res.status(401).json({
@@ -389,16 +415,63 @@ const userController = {
   // ==========================================
   async logout(req: Request, res: Response): Promise<void> {
     try {
-      const rawToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
+      // The frontend sends userId so we know which per-user cookie to clear.
+      const requestedUserId: number | undefined =
+        req.body?.userId ? Number(req.body.userId) : undefined;
+
+      // Find the matching refresh cookie
+      let rawToken: string | undefined;
+      if (requestedUserId) {
+        rawToken = req.cookies?.[refreshCookieName(requestedUserId)];
+      }
+      // Fallback: search all refreshToken_* cookies
+      if (!rawToken && req.cookies) {
+        for (const name of Object.keys(req.cookies)) {
+          if (name.startsWith(`${REFRESH_COOKIE_BASE}_`)) {
+            rawToken = req.cookies[name];
+            break;
+          }
+        }
+      }
+
+      let targetUserId = requestedUserId;
+      if (!targetUserId && rawToken) {
+        const rt = await RefreshToken.findOne({
+          where: { tokenHash: hashToken(rawToken) },
+        });
+        if (rt?.userId) {
+          targetUserId = rt.userId;
+        }
+      }
+
+      // If user is authenticated on the request
+      if (!targetUserId && (req as any).user?.id) {
+        targetUserId = Number((req as any).user.id);
+      }
+
+      // Stop any running timer for this user upon logout
+      if (targetUserId) {
+        await closeActiveLogForUser(targetUserId).catch((err) => {
+          console.error('Failed to close active timer on logout:', err);
+        });
+      }
+
       if (rawToken) {
         await revokeRefreshToken(rawToken);
       }
-      clearRefreshCookie(res);
+
+      // Clear only this user's cookie (not others)
+      if (requestedUserId) {
+        clearRefreshCookie(res, requestedUserId);
+      } else {
+        // No userId? Clear all refresh cookies as a safety net.
+        clearAllRefreshCookies(req, res);
+      }
 
       res.status(200).json({ success: true, message: 'Logged out successfully.' });
     } catch (error) {
       console.error('Error logging out:', error);
-      clearRefreshCookie(res);
+      clearAllRefreshCookies(req, res);
       res.status(500).json({ success: false, message: 'Failed to log out.' });
     }
   },
@@ -413,8 +486,12 @@ const userController = {
         return;
       }
 
+      await closeActiveLogForUser(req.user.id).catch((err) => {
+        console.error('Failed to close active timer on logoutAll:', err);
+      });
+
       await revokeAllForUser(req.user.id);
-      clearRefreshCookie(res);
+      clearAllRefreshCookies(req, res);
 
       res.status(200).json({ success: true, message: 'Logged out from all devices.' });
     } catch (error) {
@@ -466,7 +543,7 @@ const userController = {
       // Invalidate all old sessions (other devices), then issue a new one here
       await revokeAllForUser(userId);
       const refreshToken = await createRefreshToken(userId);
-      setRefreshCookie(res, refreshToken);
+      setRefreshCookie(res, refreshToken, userId);
 
       res.status(200).json({
         success: true,

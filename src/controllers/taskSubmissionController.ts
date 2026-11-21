@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import * as taskSubmissionService from '../service/taskSubmissionService';
+import { uploadToImageKit } from '../service/imageKitService';
 
 
 // -------------------------------------
@@ -45,22 +46,26 @@ export const submitTask = async (
     }
 
     // Validate attachment URL
-    if (
-      attachmentUrl !== undefined &&
-      attachmentUrl !== null &&
-      typeof attachmentUrl !== 'string'
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid attachment URL'
-      });
+    let finalAttachmentUrl =
+      attachmentUrl !== undefined && attachmentUrl !== null && typeof attachmentUrl === 'string' && attachmentUrl.trim()
+        ? attachmentUrl.trim()
+        : null;
+
+    // If mentee uploaded a file, upload to ImageKit
+    if (req.file) {
+      const uploaded = await uploadToImageKit(
+        req.file.buffer,
+        req.file.originalname,
+        '/submissions'
+      );
+      finalAttachmentUrl = uploaded.url;
     }
 
     const result = await taskSubmissionService.submitTask({
       taskId,
       submittedBy,
       submissionText: submissionText.trim(),
-      attachmentUrl
+      attachmentUrl: finalAttachmentUrl,
     });
 
     return res.status(201).json({

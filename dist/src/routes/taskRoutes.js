@@ -4,6 +4,7 @@ const express_1 = require("express");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const firstLoginCheckMiddleware_1 = require("../middleware/firstLoginCheckMiddleware");
 const validate_1 = require("../middleware/validate");
+const taskUpload_1 = require("../middleware/taskUpload");
 const taskSchema_1 = require("../schemas/taskSchema");
 const taskController_1 = require("../controllers/taskController");
 const timeLogController_1 = require("../controllers/timeLogController");
@@ -11,7 +12,7 @@ const router = (0, express_1.Router)();
 // All task routes require authentication and completed first login
 router.use(authMiddleware_1.verifyToken, firstLoginCheckMiddleware_1.checkFirstLogin);
 // Create a new task (Admin & Mentor only)
-router.post('/', (0, authMiddleware_1.authorize)('admin', 'mentor'), (0, validate_1.validate)(taskSchema_1.createTaskSchema), taskController_1.createTaskController);
+router.post('/', (0, authMiddleware_1.authorize)('admin', 'mentor'), taskUpload_1.uploadTaskAttachments, (0, validate_1.validate)(taskSchema_1.createTaskSchema), taskController_1.createTaskController);
 // Get all tasks (role-scoped)
 router.get('/', (0, validate_1.validate)(taskSchema_1.listTasksQuerySchema), taskController_1.getAllTasksController);
 // Time tracking active timer (placed before /:id so it is never matched as a param)

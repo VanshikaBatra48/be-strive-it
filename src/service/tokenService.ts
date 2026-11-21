@@ -1,9 +1,15 @@
 import crypto from 'crypto';
 import { Op } from 'sequelize';
-import type { Response, CookieOptions } from 'express';
+import type { Request, Response, CookieOptions } from 'express';
 import RefreshToken from '../models/refreshToken';
  
-export const REFRESH_COOKIE_NAME = 'refreshToken';
+/** Base name — the actual cookie is `refreshToken_<userId>`. */
+export const REFRESH_COOKIE_BASE = 'refreshToken';
+
+/** Build the per-user cookie name so each login gets its own cookie. */
+export function refreshCookieName(userId: number | string): string {
+  return `${REFRESH_COOKIE_BASE}_${userId}`;
+}
 export const REFRESH_TTL_DAYS = Number(process.env.REFRESH_TOKEN_DAYS) || 7;
 export const REFRESH_TTL_MS = REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000;
  
@@ -18,7 +24,7 @@ export class RefreshTokenError extends Error {
   }
 }
  
-const hashToken = (raw: string): string =>
+export const hashToken = (raw: string): string =>
   crypto.createHash('sha256').update(raw).digest('hex');
  
 const generateRawToken = (): string => crypto.randomBytes(48).toString('hex');
@@ -36,15 +42,26 @@ function cookieOptions(): CookieOptions {
   };
 }
  
-export function setRefreshCookie(res: Response, rawToken: string): void {
-  res.cookie(REFRESH_COOKIE_NAME, rawToken, {
+export function setRefreshCookie(res: Response, rawToken: string, userId: number | string): void {
+  res.cookie(refreshCookieName(userId), rawToken, {
     ...cookieOptions(),
     maxAge: REFRESH_TTL_MS,
   });
 }
  
-export function clearRefreshCookie(res: Response): void {
-  res.clearCookie(REFRESH_COOKIE_NAME, cookieOptions());
+export function clearRefreshCookie(res: Response, userId: number | string): void {
+  res.clearCookie(refreshCookieName(userId), cookieOptions());
+}
+
+/** Clear every `refreshToken_*` cookie found in the request (used for logout-all). */
+export function clearAllRefreshCookies(req: Request, res: Response): void {
+  if (req.cookies) {
+    for (const name of Object.keys(req.cookies)) {
+      if (name.startsWith(`${REFRESH_COOKIE_BASE}_`)) {
+        res.clearCookie(name, cookieOptions());
+      }
+    }
+  }
 }
  
 // ---------- Token lifecycle ----------

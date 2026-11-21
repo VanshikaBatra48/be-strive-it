@@ -16,7 +16,7 @@ interface SubmitTaskInput {
   taskId: number;
   submittedBy: number;
   submissionText: string;
-  attachmentUrl?: string;
+  attachmentUrl?: string | null;
 }
 
 interface ReviewInput {

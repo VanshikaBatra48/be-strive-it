@@ -7,6 +7,7 @@ exports.deleteTask = exports.updateTaskStatus = exports.evaluateTask = exports.s
 const sequelize_1 = require("sequelize");
 const tasks_1 = __importDefault(require("../models/tasks"));
 const user_1 = __importDefault(require("../models/user"));
+const imageKitService_1 = require("./imageKitService");
 const associations_1 = require("../models/associations");
 const notificationService_1 = require("../service/notificationService");
 const chatService_1 = require("../service/chatService");
@@ -109,6 +110,7 @@ const createTask = async (taskData, actor) => {
         estimated_hours: estimatedHours,
         mentee_id: taskData.mentee_id,
         assigned_by: actor.id,
+        attachments: taskData.attachments || [],
         status: 'in-progress',
     });
     // Mentee gets TASK_ASSIGNED notification
@@ -237,6 +239,7 @@ const updateTask = async (id, updateData, actor) => {
         ...(dueDateChanged ? { due_reminder_sent: false } : {}),
     });
     if (sanitizedUpdates.status === 'hold' ||
+        sanitizedUpdates.status === 'blocker' ||
         sanitizedUpdates.status === 'submitted' ||
         sanitizedUpdates.status === 'complete') {
         await (0, timeLogService_1.closeActiveLogForTask)(task.id);
@@ -322,8 +325,8 @@ const updateTaskStatus = async (id, status, actor) => {
         if (task.status === 'submitted' || task.status === 'complete' || task.status === 'needs-revision') {
             throw new ServiceError(400, `Cannot change status when task is ${task.status}`);
         }
-        if (status !== 'in-progress' && status !== 'hold') {
-            throw new ServiceError(400, 'Mentees can only set status to in-progress or hold');
+        if (status !== 'in-progress' && status !== 'hold' && status !== 'blocker') {
+            throw new ServiceError(400, 'Mentees can only set status to in-progress , hold or blocker');
         }
     }
     else {
@@ -337,7 +340,7 @@ const updateTaskStatus = async (id, status, actor) => {
     }
     const previousStatus = task.status;
     await task.update({ status });
-    if (status === 'hold') {
+    if (status === 'hold' || status === 'blocker') {
         await (0, timeLogService_1.closeActiveLogForTask)(task.id);
     }
     if (actor.role === 'mentee' && previousStatus !== status) {
@@ -356,6 +359,13 @@ const deleteTask = async (id, actor) => {
     await assertMentorCanAccess(task, actor);
     // Archive any chat group linked to this task
     await (0, chatService_1.archiveTaskGroups)(task.id).catch(() => undefined);
+    // Clean up any ImageKit attachments
+    if (Array.isArray(task.attachments) && task.attachments.length > 0) {
+        const fileIds = task.attachments.map((a) => a.key || a.id).filter(Boolean);
+        if (fileIds.length > 0) {
+            void (0, imageKitService_1.bulkDeleteFromImageKit)(fileIds);
+        }
+    }
     await task.destroy();
     return task;
 };

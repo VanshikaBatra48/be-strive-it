@@ -48,6 +48,7 @@ ChatMessage.init({
     deletedBy: { type: sequelize_1.DataTypes.INTEGER, allowNull: true },
 }, { sequelize: database_1.sequelize, tableName: 'chat_messages' });
 // ---------- Attachment ----------
+// ---------- Attachment ----------
 class ChatAttachment extends sequelize_1.Model {
 }
 exports.ChatAttachment = ChatAttachment;
@@ -55,7 +56,9 @@ ChatAttachment.init({
     id: { type: sequelize_1.DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     messageId: { type: sequelize_1.DataTypes.INTEGER, allowNull: false },
     originalName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
-    storedName: { type: sequelize_1.DataTypes.STRING(100), allowNull: false },
+    storedName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    fileId: { type: sequelize_1.DataTypes.STRING(100), allowNull: true },
+    url: { type: sequelize_1.DataTypes.STRING(1000), allowNull: true },
     mimeType: { type: sequelize_1.DataTypes.STRING(100), allowNull: false },
     size: { type: sequelize_1.DataTypes.INTEGER, allowNull: false },
     deletedAt: { type: sequelize_1.DataTypes.DATE, allowNull: true },

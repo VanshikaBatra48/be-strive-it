@@ -13,7 +13,8 @@ import {
   deleteTask,
 } from '../service/taskService';
 import type { TaskActor, TaskQueryFilters, UpdateTaskInput } from '../service/taskService';
-import type { TaskCategory, TaskPriority, TaskStatus } from '../models/tasks';
+import type { TaskCategory, TaskPriority, TaskStatus, TaskAttachment } from '../models/tasks';
+import { uploadToImageKit } from '../service/imageKitService';
 
 function getActor(req: Request): TaskActor | null {
   if (!req.user) return null;
@@ -68,6 +69,23 @@ export const createTaskController = async (
       mentee_id: number;
     };
 
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const attachments: TaskAttachment[] = [];
+
+    if (files.length > 0) {
+      for (const f of files) {
+        const uploaded = await uploadToImageKit(f.buffer, f.originalname, '/tasks');
+        attachments.push({
+          id: uploaded.fileId,
+          name: f.originalname,
+          key: uploaded.fileId,
+          url: uploaded.url,
+          size: f.size,
+          type: f.mimetype,
+        });
+      }
+    }
+
     const task = await createTask(
       {
         title,
@@ -82,6 +100,7 @@ export const createTaskController = async (
         : Number(estimated_hours),
         mentee_id: Number(mentee_id),
         assigned_by: actor.id,
+        attachments,
       },
       actor
     );

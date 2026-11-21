@@ -1,13 +1,8 @@
-import fs from 'fs';
-import crypto from 'crypto';
 import multer from 'multer';
 import type { Request, Response, NextFunction } from 'express';
-import { UPLOAD_DIR, assertCanPost, ChatError } from '../service/chatService';
+import { assertCanPost, ChatError } from '../service/chatService';
 
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-// Allow-list of types -> extension we choose ourselves (we never trust the client's filename).
-// SVG and HTML are deliberately excluded (script injection risk).
+// Allow-list of types -> extension (SVG and HTML are excluded for security)
 const ALLOWED_TYPES = new Map<string, string>([
   ['image/jpeg', '.jpg'],
   ['image/png', '.png'],
@@ -23,12 +18,9 @@ const ALLOWED_TYPES = new Map<string, string>([
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES = 5;
 
+// Store files in memory buffer so they can be piped straight to ImageKit
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) =>
-      cb(null, `${crypto.randomUUID()}${ALLOWED_TYPES.get(file.mimetype) ?? ''}`),
-  }),
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_TYPES.has(file.mimetype)) {
       return cb(new ChatError('This file type is not allowed'));
@@ -40,7 +32,7 @@ const upload = multer({
 
 /**
  * Runs BEFORE multer: confirms the user is an active member of an active group,
- * so non-members can never write files to disk.
+ * so non-members can never upload files.
  */
 export async function ensureCanPost(req: Request, res: Response, next: NextFunction) {
   try {

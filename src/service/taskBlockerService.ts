@@ -6,6 +6,7 @@ import TaskBlockerConversation from '../models/taskBlockerConversation';
 import TaskBlockerMessage from '../models/taskBlockerMessage';
 import { sequelize } from '../config/database';
 import { createBlockerNotification } from './notificationService';
+import { closeActiveLogForTask } from './timeLogService';
 
 interface ServiceError extends Error {
   statusCode?: number;
@@ -167,6 +168,7 @@ export const raiseBlocker = async (
       );
 
       await task.update({ status: 'blocker' }, { transaction });
+      await closeActiveLogForTask(task.id, transaction);
 
       return { conversation, message: blockerMessage, task, mentorId, reopened };
     });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken, authorize } from '../middleware/authMiddleware';
 import { checkFirstLogin } from '../middleware/firstLoginCheckMiddleware';
 import { validate } from '../middleware/validate';
+import { uploadTaskAttachments } from '../middleware/taskUpload';
 import {
   createTaskSchema,
   updateTaskSchema,
@@ -39,6 +40,7 @@ router.use(verifyToken, checkFirstLogin);
 router.post(
   '/',
   authorize('admin', 'mentor'),
+  uploadTaskAttachments,
   validate(createTaskSchema),
   createTaskController
 );

@@ -6,9 +6,11 @@ import type {
   TaskCategory,
   TaskPriority,
   TaskStatus,
+  TaskAttachment,
 } from '../models/tasks';
 import User from '../models/user';
 import type { UserRole } from '../models/user';
+import { bulkDeleteFromImageKit } from './imageKitService';
 import { initAssociations } from '../models/associations';
 import {
   safeNotify,
@@ -56,6 +58,7 @@ export interface CreateTaskInput {
   estimated_hours?: number | null;   // optional
   mentee_id: number;
   assigned_by: number;
+  attachments?: TaskAttachment[];
 }
 
 export type UpdateTaskInput = Partial<
@@ -210,6 +213,7 @@ export const createTask = async (
     estimated_hours: estimatedHours,
     mentee_id: taskData.mentee_id,
     assigned_by: actor.id,
+    attachments: taskData.attachments || [],
     status: 'in-progress',
   });
 
@@ -369,6 +373,7 @@ export const updateTask = async (
 
   if (
     sanitizedUpdates.status === 'hold' ||
+    sanitizedUpdates.status === 'blocker' ||
     sanitizedUpdates.status === 'submitted' ||
     sanitizedUpdates.status === 'complete'
   ) {
@@ -509,7 +514,7 @@ export const updateTaskStatus = async (
 
   await task.update({ status });
 
-  if (status === 'hold') {
+  if (status === 'hold' || status === 'blocker') {
     await closeActiveLogForTask(task.id);
   }
 
@@ -538,6 +543,14 @@ export const deleteTask = async (
 
   // Archive any chat group linked to this task
   await archiveTaskGroups(task.id).catch(() => undefined);
+
+  // Clean up any ImageKit attachments
+  if (Array.isArray(task.attachments) && task.attachments.length > 0) {
+    const fileIds = task.attachments.map((a: any) => a.key || a.id).filter(Boolean);
+    if (fileIds.length > 0) {
+      void bulkDeleteFromImageKit(fileIds);
+    }
+  }
 
   await task.destroy();
   return task;

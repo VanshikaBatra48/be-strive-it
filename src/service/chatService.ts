@@ -3,6 +3,7 @@ import path from 'path';
 import { Op } from 'sequelize';
 import {sequelize} from '../config/database';
 import User from '../models/user';
+import { uploadToImageKit, bulkDeleteFromImageKit } from './imageKitService';
 import { ChatGroup, ChatMember, ChatMessage, ChatAttachment } from '../models/chat';
 import {
   emitToGroup,
@@ -42,7 +43,8 @@ export interface Actor {
 
 export interface UploadedFile {
   originalname: string;
-  filename: string;
+  filename?: string;
+  buffer: Buffer;
   mimetype: string;
   size: number;
 }
@@ -142,7 +144,7 @@ export function serializeMessage(m: ChatMessage, attachments: ChatAttachment[] =
             originalName: a.originalName ?? 'file',
             mimeType: a.mimeType,
             size: a.size,
-            url: `/chat/attachments/${a.id}`, // relative to your API base URL
+            url: a.url || `/chat/attachments/${a.id}`, // ImageKit direct URL or legacy endpoint
           })),
   };
 }
@@ -163,8 +165,8 @@ async function removeFile(storedName: string) {
   await fs.unlink(path.join(UPLOAD_DIR, path.basename(storedName))).catch(() => undefined);
 }
 
-export async function cleanupUploadedFiles(files: UploadedFile[] = []) {
-  await Promise.all(files.map((f) => removeFile(f.filename)));
+export async function cleanupUploadedFiles(_files: any[] = []) {
+  // In-memory uploads are discarded automatically; ImageKit deletion handled on failure
 }
 
 /** Add or re-activate a membership. Returns true if the user was newly added. */
@@ -465,9 +467,7 @@ export async function deleteGroup(actor: Actor, groupId: number) {
     throw new ChatError('Only administrators can delete groups', 403);
   }
   const group = await getGroupOrThrow(groupId);
-  if (group.status !== 'archived') {
-    throw new ChatError('Only archived groups can be deleted', 400);
-  }
+  // Groups can be deleted directly without needing to be archived first.
   // 1. Gather all file attachments on disk before DB cascade deletion
   const messages = await ChatMessage.findAll({
     where: { groupId },
@@ -478,10 +478,16 @@ export async function deleteGroup(actor: Actor, groupId: number) {
     const attachments = await ChatAttachment.findAll({
       where: { messageId: { [Op.in]: messageIds } },
     });
+    const fileIds = attachments.map((a) => a.fileId).filter(Boolean) as string[];
+    if (fileIds.length > 0) {
+      void bulkDeleteFromImageKit(fileIds);
+    }
     await Promise.all(
-      attachments.map((att) =>
-        fs.unlink(path.join(UPLOAD_DIR, path.basename(att.storedName))).catch(() => undefined)
-      )
+      attachments
+        .filter((att) => !!att.storedName)
+        .map((att) =>
+          fs.unlink(path.join(UPLOAD_DIR, path.basename(att.storedName!))).catch(() => undefined)
+        )
     );
   }
   // 2. Fetch all members to update sockets and notify them
@@ -553,6 +559,34 @@ export async function sendMessage(
     throw new ChatError(`Message is too long (max ${MAX_BODY_LENGTH} characters)`);
   }
 
+  // 1. Upload files to ImageKit in parallel
+  const uploadedFiles: Array<{
+    originalName: string;
+    fileId: string;
+    url: string;
+    mimeType: string;
+    size: number;
+  }> = [];
+
+  if (files.length > 0) {
+    try {
+      for (const f of files) {
+        const uploaded = await uploadToImageKit(f.buffer, f.originalname, '/chat');
+        uploadedFiles.push({
+          originalName: f.originalname.slice(0, 255),
+          fileId: uploaded.fileId,
+          url: uploaded.url,
+          mimeType: f.mimetype,
+          size: f.size,
+        });
+      }
+    } catch (uploadError) {
+      const fileIds = uploadedFiles.map((u) => u.fileId);
+      if (fileIds.length > 0) void bulkDeleteFromImageKit(fileIds);
+      throw uploadError;
+    }
+  }
+
   const { message, attachments } = await sequelize.transaction(async (t) => {
     const message = await ChatMessage.create(
       {
@@ -565,12 +599,14 @@ export async function sendMessage(
       { transaction: t }
     );
     const attachments = await ChatAttachment.bulkCreate(
-      files.map((f) => ({
+      uploadedFiles.map((u) => ({
         messageId: message.id,
-        originalName: f.originalname.slice(0, 255),
-        storedName: f.filename,
-        mimeType: f.mimetype,
-        size: f.size,
+        originalName: u.originalName,
+        storedName: null,
+        fileId: u.fileId,
+        url: u.url,
+        mimeType: u.mimeType,
+        size: u.size,
       })),
       { transaction: t }
     );
@@ -648,6 +684,10 @@ export async function deleteMessage(actor: Actor, groupId: number, messageId: nu
   if (message.deletedAt) return { id: message.id, groupId, deleted: true };
 
   const attachments = await ChatAttachment.findAll({ where: { messageId: message.id } });
+  const fileIds = attachments.map((a) => a.fileId).filter(Boolean) as string[];
+  if (fileIds.length > 0) {
+    void bulkDeleteFromImageKit(fileIds);
+  }
   const now = new Date();
   await sequelize.transaction(async (t) => {
     // Keep 'body' intact in the database; only record deletedAt and deletedBy
@@ -691,7 +731,8 @@ export async function getAttachmentFile(actor: Actor, attachmentId: number) {
   }
 
   return {
-    filePath: path.join(UPLOAD_DIR, path.basename(att.storedName)),
+    filePath: att.storedName ? path.join(UPLOAD_DIR, path.basename(att.storedName)) : null,
+    url: att.url,
     mimeType: att.mimeType,
     originalName: att.originalName ?? 'file',
   };

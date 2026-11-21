@@ -1,6 +1,0 @@
-You can also use tools like PM2 or Node.js Cluster to run multiple Node.js processes on the same machine.
-
-PgBouncer does not distribute incoming HTTP requests between backend instances. That's the job of a Load Balancer.
-
-
-Never put either token in localStorage. An XSS attack can steal anything stored there.

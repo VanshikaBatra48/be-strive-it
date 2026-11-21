@@ -14,6 +14,7 @@ exports.TASK_STATUSES = [
     'needs-revision',
     'complete',
     'hold',
+    'blocker'
 ];
 exports.TASK_PRIORITIES = ['low', 'medium', 'high'];
 const taskIdParams = zod_1.z.object({

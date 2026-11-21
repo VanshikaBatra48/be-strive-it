@@ -5,13 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureCanPost = ensureCanPost;
 exports.uploadFiles = uploadFiles;
-const fs_1 = __importDefault(require("fs"));
-const crypto_1 = __importDefault(require("crypto"));
 const multer_1 = __importDefault(require("multer"));
 const chatService_1 = require("../service/chatService");
-fs_1.default.mkdirSync(chatService_1.UPLOAD_DIR, { recursive: true });
-// Allow-list of types -> extension we choose ourselves (we never trust the client's filename).
-// SVG and HTML are deliberately excluded (script injection risk).
+// Allow-list of types -> extension (SVG and HTML are excluded for security)
 const ALLOWED_TYPES = new Map([
     ['image/jpeg', '.jpg'],
     ['image/png', '.png'],
@@ -25,11 +21,9 @@ const ALLOWED_TYPES = new Map([
 ]);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES = 5;
+// Store files in memory buffer so they can be piped straight to ImageKit
 const upload = (0, multer_1.default)({
-    storage: multer_1.default.diskStorage({
-        destination: (_req, _file, cb) => cb(null, chatService_1.UPLOAD_DIR),
-        filename: (_req, file, cb) => cb(null, `${crypto_1.default.randomUUID()}${ALLOWED_TYPES.get(file.mimetype) ?? ''}`),
-    }),
+    storage: multer_1.default.memoryStorage(),
     fileFilter: (_req, file, cb) => {
         if (!ALLOWED_TYPES.has(file.mimetype)) {
             return cb(new chatService_1.ChatError('This file type is not allowed'));
@@ -40,7 +34,7 @@ const upload = (0, multer_1.default)({
 }).array('files', MAX_FILES);
 /**
  * Runs BEFORE multer: confirms the user is an active member of an active group,
- * so non-members can never write files to disk.
+ * so non-members can never upload files.
  */
 async function ensureCanPost(req, res, next) {
     try {

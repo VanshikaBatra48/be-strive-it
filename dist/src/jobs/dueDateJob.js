@@ -10,7 +10,7 @@ const tasks_1 = __importDefault(require("../models/tasks"));
 const user_1 = __importDefault(require("../models/user"));
 const notificationService_1 = require("../service/notificationService");
 const HOUR = 60 * 60 * 1000;
-const FINISHED_STATUSES = ['submitted', 'complete', 'hold'];
+const FINISHED_STATUSES = ['submitted', 'complete', 'hold', 'blocker'];
 let running = false;
 // Find the mentor assigned to a mentee
 async function getAssignedMentor(menteeId) {

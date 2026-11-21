@@ -11,6 +11,8 @@ const refreshToken_1 = __importDefault(require("./refreshToken"));
 const notification_1 = require("./notification");
 const taskSubmission_1 = __importDefault(require("./taskSubmission"));
 const taskTimeLog_1 = __importDefault(require("./taskTimeLog"));
+const taskBlockerConversation_1 = __importDefault(require("./taskBlockerConversation"));
+const taskBlockerMessage_1 = __importDefault(require("./taskBlockerMessage"));
 let initialized = false;
 /** Register Sequelize model associations once across the application. */
 function initAssociations() {
@@ -74,6 +76,65 @@ function initAssociations() {
     taskTimeLog_1.default.belongsTo(tasks_1.default, { foreignKey: 'task_id', as: 'task' });
     user_1.default.hasMany(taskTimeLog_1.default, { foreignKey: 'user_id', as: 'timeLogs' });
     taskTimeLog_1.default.belongsTo(user_1.default, { foreignKey: 'user_id', as: 'user' });
+    // =====================================
+    // TASK BLOCKER CONVERSATION ASSOCIATIONS
+    // =====================================
+    // One Task has one blocker conversation
+    tasks_1.default.hasMany(taskBlockerConversation_1.default, {
+        foreignKey: 'taskId',
+        as: 'blockerConversations',
+        onDelete: 'CASCADE',
+    });
+    taskBlockerConversation_1.default.belongsTo(tasks_1.default, {
+        foreignKey: 'taskId',
+        as: 'task',
+    });
+    // =====================================
+    // CONVERSATION AND MESSAGE ASSOCIATIONS
+    // =====================================
+    // One conversation has many messages
+    taskBlockerConversation_1.default.hasMany(taskBlockerMessage_1.default, {
+        foreignKey: 'conversationId',
+        as: 'messages',
+        onDelete: 'CASCADE',
+    });
+    taskBlockerMessage_1.default.belongsTo(taskBlockerConversation_1.default, {
+        foreignKey: 'conversationId',
+        as: 'conversation',
+    });
+    // =====================================
+    // USER AND CONVERSATION ASSOCIATIONS
+    // =====================================
+    // Conversation belongs to a mentee
+    user_1.default.hasMany(taskBlockerConversation_1.default, {
+        foreignKey: 'menteeId',
+        as: 'raisedBlockers',
+    });
+    taskBlockerConversation_1.default.belongsTo(user_1.default, {
+        foreignKey: 'menteeId',
+        as: 'mentee',
+    });
+    // Conversation belongs to a mentor
+    user_1.default.hasMany(taskBlockerConversation_1.default, {
+        foreignKey: 'mentorId',
+        as: 'assignedBlockerConversations',
+    });
+    taskBlockerConversation_1.default.belongsTo(user_1.default, {
+        foreignKey: 'mentorId',
+        as: 'mentor',
+    });
+    // =====================================
+    // USER AND MESSAGE ASSOCIATIONS
+    // =====================================
+    // One user can send many blocker messages
+    user_1.default.hasMany(taskBlockerMessage_1.default, {
+        foreignKey: 'senderId',
+        as: 'sentBlockerMessages',
+    });
+    taskBlockerMessage_1.default.belongsTo(user_1.default, {
+        foreignKey: 'senderId',
+        as: 'sender',
+    });
     initialized = true;
 }
 exports.default = initAssociations;

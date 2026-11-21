@@ -82,11 +82,14 @@ ChatMessage.init(
 );
 
 // ---------- Attachment ----------
+// ---------- Attachment ----------
 export class ChatAttachment extends Model {
   declare id: number;
   declare messageId: number;
   declare originalName: string | null;
-  declare storedName: string; // random name on disk
+  declare storedName: string | null; // retained for backward compatibility / fallback
+  declare fileId: string | null;     // ImageKit file ID (used for deletion)
+  declare url: string | null;        // ImageKit direct CDN URL
   declare mimeType: string;
   declare size: number;
   declare deletedAt: Date | null;
@@ -97,7 +100,9 @@ ChatAttachment.init(
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     messageId: { type: DataTypes.INTEGER, allowNull: false },
     originalName: { type: DataTypes.STRING(255), allowNull: true },
-    storedName: { type: DataTypes.STRING(100), allowNull: false },
+    storedName: { type: DataTypes.STRING(255), allowNull: true },
+    fileId: { type: DataTypes.STRING(100), allowNull: true },
+    url: { type: DataTypes.STRING(1000), allowNull: true },
     mimeType: { type: DataTypes.STRING(100), allowNull: false },
     size: { type: DataTypes.INTEGER, allowNull: false },
     deletedAt: { type: DataTypes.DATE, allowNull: true },

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyMemberAddedToGroup = exports.notifyGroupCreated = exports.notifyNewMessage = exports.getUnreadCount = exports.listNotifications = exports.notifyMentorTaskDueDate = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
+exports.createBlockerNotification = exports.notifyMemberAddedToGroup = exports.notifyGroupCreated = exports.notifyNewMessage = exports.getUnreadCount = exports.listNotifications = exports.notifyMentorTaskDueDate = exports.notifyTaskStatusChanged = exports.notifyTaskSubmitted = exports.notifyTaskUpdated = exports.notifyEvaluationSubmitted = exports.notifyTaskChangeRequest = exports.notifyTaskDueDate = exports.notifyTaskAssigned = exports.MENTOR_TYPES = exports.MENTEE_TYPES = void 0;
 exports.createNotification = createNotification;
 exports.safeNotify = safeNotify;
 exports.markRead = markRead;
@@ -15,14 +15,18 @@ exports.MENTEE_TYPES = [
     'EVALUATION_SUBMITTED',
     'NEW_MESSAGE',
     'GROUP_CREATED',
-    'ADDED_TO_GROUP'
+    'ADDED_TO_GROUP',
+    'BLOCKER_MESSAGE'
 ];
 exports.MENTOR_TYPES = [
     'TASK_UPDATED',
     'TASK_SUBMITTED',
     'TASK_STATUS_CHANGED',
     'NEW_MESSAGE',
-    'GROUP_CREATED'
+    'GROUP_CREATED',
+    'BLOCKER_RAISED', // mentee raised a blocker
+    'BLOCKER_MESSAGE', // mentee replied
+    'BLOCKER_RESOLVED', // mentee resolved it
 ];
 async function createNotification(input, options = {}) {
     const { transaction } = options;
@@ -197,4 +201,16 @@ const notifyMemberAddedToGroup = async (userId, groupId, groupName) => {
     });
 };
 exports.notifyMemberAddedToGroup = notifyMemberAddedToGroup;
+const createBlockerNotification = (data, transaction) => createNotification({
+    user_id: data.recipientId,
+    type: data.type,
+    title: data.title,
+    message: data.message,
+    data: {
+        senderId: data.senderId,
+        conversationId: data.conversationId,
+        taskId: data.taskId,
+    },
+}, { transaction });
+exports.createBlockerNotification = createBlockerNotification;
 //# sourceMappingURL=notificationService.js.map

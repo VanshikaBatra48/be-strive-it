@@ -147,17 +147,27 @@ const chatController = {
     }),
     /** Files are only reachable through this authenticated route. */
     downloadAttachment: wrap(async (req, res) => {
-        const { filePath, mimeType, originalName } = await chat.getAttachmentFile(actorOf(req), idSchema.parse(req.params.attachmentId));
-        const inline = mimeType.startsWith('image/');
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Cache-Control', 'private, no-cache');
-        res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(originalName)}`);
-        res.sendFile(filePath, (err) => {
-            if (err && !res.headersSent) {
-                res.status(404).json({ success: false, message: 'File not found' });
-            }
-        });
+        const { filePath, url, mimeType, originalName } = await chat.getAttachmentFile(actorOf(req), idSchema.parse(req.params.attachmentId));
+        // If file is hosted on ImageKit, redirect directly to the CDN URL
+        if (url) {
+            res.redirect(url);
+            return;
+        }
+        // Fallback for legacy files stored on local server disk
+        if (filePath) {
+            const inline = mimeType.startsWith('image/');
+            res.setHeader('Content-Type', mimeType);
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'private, no-cache');
+            res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(originalName)}`);
+            res.sendFile(filePath, (err) => {
+                if (err && !res.headersSent) {
+                    res.status(404).json({ success: false, message: 'File not found' });
+                }
+            });
+            return;
+        }
+        res.status(404).json({ success: false, message: 'File not found' });
     }),
 };
 exports.default = chatController;

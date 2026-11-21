@@ -12,6 +12,7 @@ import {
   authenticate,
   authorize
 } from '../middleware/authMiddleware';
+import { uploadSubmissionAttachment } from '../middleware/taskUpload';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.post(
   '/tasks/:taskId/submit',
   authenticate,
   authorize('mentee'),
+  uploadSubmissionAttachment,
   submitTask
 );
 

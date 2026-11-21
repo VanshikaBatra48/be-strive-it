@@ -31,6 +31,7 @@ const path_1 = __importDefault(require("path"));
 const sequelize_1 = require("sequelize");
 const database_1 = require("../config/database");
 const user_1 = __importDefault(require("../models/user"));
+const imageKitService_1 = require("./imageKitService");
 const chat_1 = require("../models/chat");
 const socket_1 = require("../socket");
 const notificationService_1 = require("../service/notificationService");
@@ -140,7 +141,7 @@ function serializeMessage(m, attachments = []) {
                 originalName: a.originalName ?? 'file',
                 mimeType: a.mimeType,
                 size: a.size,
-                url: `/chat/attachments/${a.id}`, // relative to your API base URL
+                url: a.url || `/chat/attachments/${a.id}`, // ImageKit direct URL or legacy endpoint
             })),
     };
 }
@@ -158,8 +159,8 @@ async function announce(groupId, body) {
 async function removeFile(storedName) {
     await promises_1.default.unlink(path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(storedName))).catch(() => undefined);
 }
-async function cleanupUploadedFiles(files = []) {
-    await Promise.all(files.map((f) => removeFile(f.filename)));
+async function cleanupUploadedFiles(_files = []) {
+    // In-memory uploads are discarded automatically; ImageKit deletion handled on failure
 }
 /** Add or re-activate a membership. Returns true if the user was newly added. */
 async function upsertMember(groupId, userId) {
@@ -385,9 +386,7 @@ async function deleteGroup(actor, groupId) {
         throw new ChatError('Only administrators can delete groups', 403);
     }
     const group = await getGroupOrThrow(groupId);
-    if (group.status !== 'archived') {
-        throw new ChatError('Only archived groups can be deleted', 400);
-    }
+    // Groups can be deleted directly without needing to be archived first.
     // 1. Gather all file attachments on disk before DB cascade deletion
     const messages = await chat_1.ChatMessage.findAll({
         where: { groupId },
@@ -398,7 +397,13 @@ async function deleteGroup(actor, groupId) {
         const attachments = await chat_1.ChatAttachment.findAll({
             where: { messageId: { [sequelize_1.Op.in]: messageIds } },
         });
-        await Promise.all(attachments.map((att) => promises_1.default.unlink(path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(att.storedName))).catch(() => undefined)));
+        const fileIds = attachments.map((a) => a.fileId).filter(Boolean);
+        if (fileIds.length > 0) {
+            void (0, imageKitService_1.bulkDeleteFromImageKit)(fileIds);
+        }
+        await Promise.all(attachments
+            .filter((att) => !!att.storedName)
+            .map((att) => promises_1.default.unlink(path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(att.storedName))).catch(() => undefined)));
     }
     // 2. Fetch all members to update sockets and notify them
     const members = await chat_1.ChatMember.findAll({ where: { groupId } });
@@ -456,6 +461,28 @@ async function sendMessage(actor, groupId, input) {
     if (body.length > exports.MAX_BODY_LENGTH) {
         throw new ChatError(`Message is too long (max ${exports.MAX_BODY_LENGTH} characters)`);
     }
+    // 1. Upload files to ImageKit in parallel
+    const uploadedFiles = [];
+    if (files.length > 0) {
+        try {
+            for (const f of files) {
+                const uploaded = await (0, imageKitService_1.uploadToImageKit)(f.buffer, f.originalname, '/chat');
+                uploadedFiles.push({
+                    originalName: f.originalname.slice(0, 255),
+                    fileId: uploaded.fileId,
+                    url: uploaded.url,
+                    mimeType: f.mimetype,
+                    size: f.size,
+                });
+            }
+        }
+        catch (uploadError) {
+            const fileIds = uploadedFiles.map((u) => u.fileId);
+            if (fileIds.length > 0)
+                void (0, imageKitService_1.bulkDeleteFromImageKit)(fileIds);
+            throw uploadError;
+        }
+    }
     const { message, attachments } = await database_1.sequelize.transaction(async (t) => {
         const message = await chat_1.ChatMessage.create({
             groupId,
@@ -464,12 +491,14 @@ async function sendMessage(actor, groupId, input) {
             type: files.length ? 'file' : 'text',
             body: body || null,
         }, { transaction: t });
-        const attachments = await chat_1.ChatAttachment.bulkCreate(files.map((f) => ({
+        const attachments = await chat_1.ChatAttachment.bulkCreate(uploadedFiles.map((u) => ({
             messageId: message.id,
-            originalName: f.originalname.slice(0, 255),
-            storedName: f.filename,
-            mimeType: f.mimetype,
-            size: f.size,
+            originalName: u.originalName,
+            storedName: null,
+            fileId: u.fileId,
+            url: u.url,
+            mimeType: u.mimeType,
+            size: u.size,
         })), { transaction: t });
         return { message, attachments };
     });
@@ -525,6 +554,10 @@ async function deleteMessage(actor, groupId, messageId) {
     if (message.deletedAt)
         return { id: message.id, groupId, deleted: true };
     const attachments = await chat_1.ChatAttachment.findAll({ where: { messageId: message.id } });
+    const fileIds = attachments.map((a) => a.fileId).filter(Boolean);
+    if (fileIds.length > 0) {
+        void (0, imageKitService_1.bulkDeleteFromImageKit)(fileIds);
+    }
     const now = new Date();
     await database_1.sequelize.transaction(async (t) => {
         // Keep 'body' intact in the database; only record deletedAt and deletedBy
@@ -564,7 +597,8 @@ async function getAttachmentFile(actor, attachmentId) {
         await requireMember(msg.groupId, actor.id);
     }
     return {
-        filePath: path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(att.storedName)),
+        filePath: att.storedName ? path_1.default.join(exports.UPLOAD_DIR, path_1.default.basename(att.storedName)) : null,
+        url: att.url,
         mimeType: att.mimeType,
         originalName: att.originalName ?? 'file',
     };

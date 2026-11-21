@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteTaskController = exports.evaluateTaskController = exports.submitTaskController = exports.updateTaskStatusController = exports.updateTaskController = exports.getTaskByIdController = exports.getAllTasksController = exports.createTaskController = void 0;
 const taskService_1 = require("../service/taskService");
+const imageKitService_1 = require("../service/imageKitService");
 function getActor(req) {
     if (!req.user)
         return null;
@@ -30,6 +31,21 @@ const createTaskController = async (req, res, next) => {
             return res.status(401).json({ success: false, message: 'Authentication required' });
         }
         const { title, description, category, priority, start_date, due_date, estimated_hours, mentee_id, } = req.body;
+        const files = req.files ?? [];
+        const attachments = [];
+        if (files.length > 0) {
+            for (const f of files) {
+                const uploaded = await (0, imageKitService_1.uploadToImageKit)(f.buffer, f.originalname, '/tasks');
+                attachments.push({
+                    id: uploaded.fileId,
+                    name: f.originalname,
+                    key: uploaded.fileId,
+                    url: uploaded.url,
+                    size: f.size,
+                    type: f.mimetype,
+                });
+            }
+        }
         const task = await (0, taskService_1.createTask)({
             title,
             description,
@@ -42,6 +58,7 @@ const createTaskController = async (req, res, next) => {
                 : Number(estimated_hours),
             mentee_id: Number(mentee_id),
             assigned_by: actor.id,
+            attachments,
         }, actor);
         return res.status(201).json({
             success: true,

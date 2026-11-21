@@ -38,7 +38,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const userService_1 = __importStar(require("../service/userService"));
 const user_1 = __importDefault(require("../models/user"));
+const refreshToken_1 = __importDefault(require("../models/refreshToken"));
 const authMiddleware_1 = require("../middleware/authMiddleware");
+const timeLogService_1 = require("../service/timeLogService");
 const tokenService_1 = require("../service/tokenService");
 // ---------- Helpers ----------
 /** Safely read the message from anything thrown in a catch block. */
@@ -247,7 +249,7 @@ const userController = {
             // now the short-lived access token.
             const result = await userService_1.default.login(email, password);
             const refreshToken = await (0, tokenService_1.createRefreshToken)(Number(result.user.id));
-            (0, tokenService_1.setRefreshCookie)(res, refreshToken);
+            (0, tokenService_1.setRefreshCookie)(res, refreshToken, result.user.id);
             res.status(200).json({
                 success: true,
                 message: result.message,
@@ -286,7 +288,24 @@ const userController = {
     // ==========================================
     async refresh(req, res) {
         try {
-            const rawToken = req.cookies?.[tokenService_1.REFRESH_COOKIE_NAME];
+            // The frontend sends the userId in the body so we know which
+            // per-user cookie to read (cookies are shared across tabs).
+            const requestedUserId = req.body?.userId ? Number(req.body.userId) : undefined;
+            // Look for a per-user cookie first; fall back to the legacy
+            // shared cookie name for backwards compatibility.
+            let rawToken;
+            if (requestedUserId) {
+                rawToken = req.cookies?.[(0, tokenService_1.refreshCookieName)(requestedUserId)];
+            }
+            // Fallback: try every refreshToken_* cookie present
+            if (!rawToken && req.cookies) {
+                for (const name of Object.keys(req.cookies)) {
+                    if (name.startsWith(`${tokenService_1.REFRESH_COOKIE_BASE}_`)) {
+                        rawToken = req.cookies[name];
+                        break;
+                    }
+                }
+            }
             if (!rawToken) {
                 res.status(401).json({
                     success: false,
@@ -301,7 +320,7 @@ const userController = {
             });
             if (!user || user.status !== 'active') {
                 await (0, tokenService_1.revokeAllForUser)(userId);
-                (0, tokenService_1.clearRefreshCookie)(res);
+                (0, tokenService_1.clearRefreshCookie)(res, userId);
                 res.status(401).json({
                     success: false,
                     code: 'ACCOUNT_UNAVAILABLE',
@@ -310,7 +329,7 @@ const userController = {
                 return;
             }
             if (newToken) {
-                (0, tokenService_1.setRefreshCookie)(res, newToken);
+                (0, tokenService_1.setRefreshCookie)(res, newToken, userId);
             }
             const accessToken = (0, authMiddleware_1.generateAccessToken)({
                 id: user.id,
@@ -326,7 +345,9 @@ const userController = {
             });
         }
         catch (error) {
-            (0, tokenService_1.clearRefreshCookie)(res);
+            // We can't clear a specific cookie here because we don't know
+            // which userId to target — clear all refresh cookies.
+            (0, tokenService_1.clearAllRefreshCookies)(req, res);
             if (error instanceof tokenService_1.RefreshTokenError) {
                 res.status(401).json({
                     success: false,
@@ -347,16 +368,57 @@ const userController = {
     // ==========================================
     async logout(req, res) {
         try {
-            const rawToken = req.cookies?.[tokenService_1.REFRESH_COOKIE_NAME];
+            // The frontend sends userId so we know which per-user cookie to clear.
+            const requestedUserId = req.body?.userId ? Number(req.body.userId) : undefined;
+            // Find the matching refresh cookie
+            let rawToken;
+            if (requestedUserId) {
+                rawToken = req.cookies?.[(0, tokenService_1.refreshCookieName)(requestedUserId)];
+            }
+            // Fallback: search all refreshToken_* cookies
+            if (!rawToken && req.cookies) {
+                for (const name of Object.keys(req.cookies)) {
+                    if (name.startsWith(`${tokenService_1.REFRESH_COOKIE_BASE}_`)) {
+                        rawToken = req.cookies[name];
+                        break;
+                    }
+                }
+            }
+            let targetUserId = requestedUserId;
+            if (!targetUserId && rawToken) {
+                const rt = await refreshToken_1.default.findOne({
+                    where: { tokenHash: (0, tokenService_1.hashToken)(rawToken) },
+                });
+                if (rt?.userId) {
+                    targetUserId = rt.userId;
+                }
+            }
+            // If user is authenticated on the request
+            if (!targetUserId && req.user?.id) {
+                targetUserId = Number(req.user.id);
+            }
+            // Stop any running timer for this user upon logout
+            if (targetUserId) {
+                await (0, timeLogService_1.closeActiveLogForUser)(targetUserId).catch((err) => {
+                    console.error('Failed to close active timer on logout:', err);
+                });
+            }
             if (rawToken) {
                 await (0, tokenService_1.revokeRefreshToken)(rawToken);
             }
-            (0, tokenService_1.clearRefreshCookie)(res);
+            // Clear only this user's cookie (not others)
+            if (requestedUserId) {
+                (0, tokenService_1.clearRefreshCookie)(res, requestedUserId);
+            }
+            else {
+                // No userId? Clear all refresh cookies as a safety net.
+                (0, tokenService_1.clearAllRefreshCookies)(req, res);
+            }
             res.status(200).json({ success: true, message: 'Logged out successfully.' });
         }
         catch (error) {
             console.error('Error logging out:', error);
-            (0, tokenService_1.clearRefreshCookie)(res);
+            (0, tokenService_1.clearAllRefreshCookies)(req, res);
             res.status(500).json({ success: false, message: 'Failed to log out.' });
         }
     },
@@ -369,8 +431,11 @@ const userController = {
                 res.status(401).json({ success: false, message: 'Authentication required.' });
                 return;
             }
+            await (0, timeLogService_1.closeActiveLogForUser)(req.user.id).catch((err) => {
+                console.error('Failed to close active timer on logoutAll:', err);
+            });
             await (0, tokenService_1.revokeAllForUser)(req.user.id);
-            (0, tokenService_1.clearRefreshCookie)(res);
+            (0, tokenService_1.clearAllRefreshCookies)(req, res);
             res.status(200).json({ success: true, message: 'Logged out from all devices.' });
         }
         catch (error) {
@@ -413,7 +478,7 @@ const userController = {
             // Invalidate all old sessions (other devices), then issue a new one here
             await (0, tokenService_1.revokeAllForUser)(userId);
             const refreshToken = await (0, tokenService_1.createRefreshToken)(userId);
-            (0, tokenService_1.setRefreshCookie)(res, refreshToken);
+            (0, tokenService_1.setRefreshCookie)(res, refreshToken, userId);
             res.status(200).json({
                 success: true,
                 message: result.message,
