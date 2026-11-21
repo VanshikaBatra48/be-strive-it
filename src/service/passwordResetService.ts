@@ -161,7 +161,7 @@ export async function resetPassword(
       throw new Error('RESET_TOKEN_EXPIRED');
     }
 
-    const user = await User.findByPk(resetRequest.userId, {
+    const user = await User.unscoped().findByPk(resetRequest.userId, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -197,7 +197,7 @@ export async function resetPassword(
 
     return { message: 'Password reset successfully' };
   } catch (error) {
-    await transaction.rollback();
-    throw error;
+  await transaction.rollback();
+  throw error;
   }
 }

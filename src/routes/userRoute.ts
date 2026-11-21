@@ -14,6 +14,8 @@ import {
   getAllUsersSchema,
 } from '../schemas/userSchema';
 
+import { updatePassword } from "../controllers/userController";
+
 const router = Router();
 
 // User Login (generates access token + sets httpOnly refresh cookie)
@@ -93,8 +95,10 @@ router.delete(
   verifyToken,
   checkFirstLogin,
   authorize('admin'),
-  validate(getUserSchema),
+  validate(getUserSchema),  
   userController.deleteUser
 );
+
+router.patch("/users/update-password", verifyToken, updatePassword);
 
 export default router;
