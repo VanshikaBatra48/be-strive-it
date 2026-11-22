@@ -11,12 +11,14 @@ export type SubmissionStatus =
   | 'changes_requested'
   | 'approved';
 
-interface TaskSubmissionAttributes {
+export interface TaskSubmissionAttributes {
   id: number;
   taskId: number;
   submittedBy: number;
   version: number;
   submissionText: string;
+  submissionUrl?: string | null;
+  demoUrl?: string | null;
   attachmentUrl?: string | null;
   status: SubmissionStatus;
   mentorFeedback?: string | null;
@@ -26,10 +28,12 @@ interface TaskSubmissionAttributes {
   updatedAt?: Date;
 }
 
-interface TaskSubmissionCreationAttributes
+export interface TaskSubmissionCreationAttributes
   extends Optional<
     TaskSubmissionAttributes,
     | 'id'
+    | 'submissionUrl'
+    | 'demoUrl'
     | 'attachmentUrl'
     | 'status'
     | 'mentorFeedback'
@@ -49,6 +53,8 @@ class TaskSubmission
   declare submittedBy: number;
   declare version: number;
   declare submissionText: string;
+  declare submissionUrl: string | null;
+  declare demoUrl: string | null;
   declare attachmentUrl: string | null;
   declare status: SubmissionStatus;
   declare mentorFeedback: string | null;
@@ -84,6 +90,16 @@ TaskSubmission.init(
     submissionText: {
       type: DataTypes.TEXT,
       allowNull: false
+    },
+
+    submissionUrl: {
+      type: DataTypes.STRING(1000),
+      allowNull: true
+    },
+
+    demoUrl: {
+      type: DataTypes.STRING(1000),
+      allowNull: true
     },
 
     attachmentUrl: {

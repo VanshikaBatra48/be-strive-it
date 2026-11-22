@@ -16,6 +16,8 @@ interface SubmitTaskInput {
   taskId: number;
   submittedBy: number;
   submissionText: string;
+  submissionUrl?: string | null;
+  demoUrl?: string | null;
   attachmentUrl?: string | null;
 }
 
@@ -60,6 +62,8 @@ export const submitTask = async (
       taskId,
       submittedBy,
       submissionText,
+      submissionUrl,
+      demoUrl,
       attachmentUrl
     } = input;
 
@@ -114,6 +118,8 @@ export const submitTask = async (
         submittedBy,
         version: nextVersion,
         submissionText,
+        submissionUrl: submissionUrl || null,
+        demoUrl: demoUrl || null,
         attachmentUrl: attachmentUrl || null,
         status: 'submitted'
       },
@@ -121,7 +127,11 @@ export const submitTask = async (
     );
     await task.update(
       {
-        status: 'submitted'
+        status: 'submitted',
+        submission_url: submissionUrl || (attachmentUrl && !attachmentUrl.includes('ik.imagekit.io') ? attachmentUrl : task.submission_url),
+        demo_url: demoUrl || task.demo_url,
+        submission_notes: submissionText,
+        submitted_at: new Date(),
       },
       { transaction }
     );

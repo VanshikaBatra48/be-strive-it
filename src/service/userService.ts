@@ -582,60 +582,6 @@ const userService = {
 
     return serializePublicUser(user);
   },
-
-  // Get a single user by email (without the password)
-  // async getUserByEmail(email: string): Promise<PublicUser> {
-  //   const user = await User.findOne({
-  //     where: { email: email.trim().toLowerCase() },
-  //     attributes: { exclude: ['password'] },
-  //   });
-
-  //   if (!user) {
-  //     throw new Error('User not found');
-  //   }
-
-  //   const { password: _password, ...userObj } = user.toJSON();
-  //   return userObj;
-  // },
-
-  // Get all users with a given role
-  // async getUsersByRole(role: string): Promise<PublicUser[]> {
-  //   const normalizedRole = normalizeRole(role);
-  //   if (!normalizedRole) {
-  //     throw new Error('Invalid role');
-  //   }
-
-  //   const users = await User.findAll({
-  //     where: { role: normalizedRole },
-  //     attributes: { exclude: ['password'] },
-  //     order: [['id', 'ASC']],
-  //   });
-
-  //   return users.map((u) => {
-  //     const { password: _password, ...userObj } = u.toJSON();
-  //     return userObj;
-  //   });
-  // },
-
-  // Get all users with a given status
-  // async getUsersByStatus(status: string): Promise<PublicUser[]> {
-  //   const normalizedStatus = normalizeStatus(status);
-  //   if (!normalizedStatus) {
-  //     throw new Error('Invalid status');
-  //   }
-
-  //   const users = await User.findAll({
-  //     where: { status: normalizedStatus },
-  //     attributes: { exclude: ['password'] },
-  //     order: [['id', 'ASC']],
-  //   });
-
-  //   return users.map((u) => {
-  //     const { password: _password, ...userObj } = u.toJSON();
-  //     return userObj;
-  //   });
-  // },
-
   // Update user details
   async updateUser(
     id: number | string,
@@ -926,25 +872,96 @@ const userService = {
       throw new Error('Email and password are required');
     }
 
-    const user = await User.findOne({
-      where: { email: email.trim().toLowerCase() },
-      attributes: {
-    include: ['password'],
-    },
-      include: MENTOR_PUBLIC_INCLUDE,
-    });
+    const normalizedEmail = email.trim().toLowerCase();
+    const rawPassword = password;
 
-    if (!user) {
-      throw new Error('Invalid email or password');
-    }
+    // Admin credentials from .env
+    const adminEmail = (
+      process.env.GMAIL ||
+      process.env.ADMIN_EMAIL ||
+      process.env.ADMIN_GMAIL ||
+      ''
+    ).trim().toLowerCase();
 
-    if (user.status === 'inactive') {
-      throw new Error('Account is inactive. Please contact administrator.');
-    }
+    const adminPassword = (
+      process.env.password !== undefined
+        ? String(process.env.password)
+        : process.env.ADMIN_PASSWORD || ''
+    ).trim();
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      throw new Error('Invalid email or password');
+    // Check if the provided credentials match the admin credentials in .env
+    const isAdminEnvMatch = Boolean(
+      adminEmail &&
+      adminPassword &&
+      normalizedEmail === adminEmail &&
+      rawPassword === adminPassword
+    );
+
+    let user: User | null = null;
+
+    if (isAdminEnvMatch) {
+      // Step: Treat user as admin
+      user = await User.findOne({
+        where: { email: adminEmail },
+        attributes: {
+          include: ['password'],
+        },
+        include: MENTOR_PUBLIC_INCLUDE,
+      });
+
+      if (!user) {
+        // Automatically create admin user record in DB if not already present
+        const hashedPassword = await bcrypt.hash(adminPassword, 10);
+        user = await User.create({
+          name: 'Admin',
+          email: adminEmail,
+          password: hashedPassword,
+          role: 'admin',
+          status: 'active',
+          firstLogin: false,
+          on_Board: true,
+        });
+      } else {
+        // Ensure user is treated as admin and active
+        const updates: Partial<{ role: UserRole; status: UserStatus; password: string }> = {};
+        if (user.role !== 'admin') {
+          updates.role = 'admin';
+        }
+        if (user.status !== 'active') {
+          updates.status = 'active';
+        }
+        const isDbPasswordMatch = await bcrypt.compare(adminPassword, user.password);
+        if (!isDbPasswordMatch) {
+          updates.password = await bcrypt.hash(adminPassword, 10);
+        }
+        if (Object.keys(updates).length > 0) {
+          await user.update(updates);
+          if (updates.role) user.role = updates.role;
+          if (updates.status) user.status = updates.status;
+          if (updates.password) user.password = updates.password;
+        }
+      }
+    } else {
+      user = await User.findOne({
+        where: { email: normalizedEmail },
+        attributes: {
+          include: ['password'],
+        },
+        include: MENTOR_PUBLIC_INCLUDE,
+      });
+
+      if (!user) {
+        throw new Error('Invalid email or password');
+      }
+
+      if (user.status === 'inactive') {
+        throw new Error('Account is inactive. Please contact administrator.');
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        throw new Error('Invalid email or password');
+      }
     }
 
     const token = generateToken({
@@ -1138,23 +1155,6 @@ const userService = {
       deletedTasksCount,
     };
   },
-
-  // Mark first login as completed
-  // async completeFirstLogin(id: number | string): Promise<{ message: string }> {
-  //   const user = await User.findByPk(id);
-
-  //   if (!user) {
-  //     throw new Error('User not found');
-  //   }
-
-  //   if (user.firstLogin) {
-  //     user.firstLogin = false;
-  //     user.on_Board = true;
-  //     await user.save();
-  //   }
-
-  //   return { message: 'First login completed successfully' };
-  // },
 };
 
 export default userService;

@@ -16,7 +16,28 @@ export const submitTask = async (
     const taskId = Number(req.params.taskId);
     const submittedBy = Number(req.user?.id);
 
-    const { submissionText, attachmentUrl } = req.body;
+    const submissionText =
+      typeof req.body.submissionText === 'string'
+        ? req.body.submissionText.trim()
+        : typeof req.body.submission_notes === 'string'
+        ? req.body.submission_notes.trim()
+        : typeof req.body.comments === 'string'
+        ? req.body.comments.trim()
+        : '';
+
+    const submissionUrl =
+      typeof req.body.submissionUrl === 'string' && req.body.submissionUrl.trim()
+        ? req.body.submissionUrl.trim()
+        : typeof req.body.submission_url === 'string' && req.body.submission_url.trim()
+        ? req.body.submission_url.trim()
+        : null;
+
+    const demoUrl =
+      typeof req.body.demoUrl === 'string' && req.body.demoUrl.trim()
+        ? req.body.demoUrl.trim()
+        : typeof req.body.demo_url === 'string' && req.body.demo_url.trim()
+        ? req.body.demo_url.trim()
+        : null;
 
     // Validate task ID
     if (!Number.isInteger(taskId) || taskId <= 0) {
@@ -35,20 +56,17 @@ export const submitTask = async (
     }
 
     // Validate submission text
-    if (
-      typeof submissionText !== 'string' ||
-      !submissionText.trim()
-    ) {
+    if (!submissionText) {
       return res.status(400).json({
         success: false,
-        message: 'Submission text is required'
+        message: 'Submission text / comments are required'
       });
     }
 
     // Validate attachment URL
     let finalAttachmentUrl =
-      attachmentUrl !== undefined && attachmentUrl !== null && typeof attachmentUrl === 'string' && attachmentUrl.trim()
-        ? attachmentUrl.trim()
+      typeof req.body.attachmentUrl === 'string' && req.body.attachmentUrl.trim()
+        ? req.body.attachmentUrl.trim()
         : null;
 
     // If mentee uploaded a file, upload to ImageKit
@@ -61,10 +79,20 @@ export const submitTask = async (
       finalAttachmentUrl = uploaded.url;
     }
 
+    // Must provide either a submission URL or an attached deliverable
+    if (!submissionUrl && !finalAttachmentUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a submission URL or attach a file'
+      });
+    }
+
     const result = await taskSubmissionService.submitTask({
       taskId,
       submittedBy,
-      submissionText: submissionText.trim(),
+      submissionText,
+      submissionUrl,
+      demoUrl,
       attachmentUrl: finalAttachmentUrl,
     });
 
