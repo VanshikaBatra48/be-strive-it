@@ -15,6 +15,7 @@ import {
 } from '../schemas/userSchema';
 
 import { updatePassword } from "../controllers/userController";
+import { getHierarchy } from "../controllers/hierarchyController";
 
 const router = Router();
 
@@ -100,5 +101,14 @@ router.delete(
 );
 
 router.patch("/users/update-password", verifyToken, updatePassword);
+
+// Get full hierarchy: Admin -> Mentors -> Mentees (Admin only)
+router.get(
+  '/users/hierarchy',
+  verifyToken,
+  checkFirstLogin,
+  authorize('admin'),
+  getHierarchy
+);
 
 export default router;
