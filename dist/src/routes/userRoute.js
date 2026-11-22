@@ -10,6 +10,7 @@ const firstLoginCheckMiddleware_1 = require("../middleware/firstLoginCheckMiddle
 const validate_1 = require("../middleware/validate");
 const userSchema_1 = require("../schemas/userSchema");
 const userController_2 = require("../controllers/userController");
+const hierarchyController_1 = require("../controllers/hierarchyController");
 const router = (0, express_1.Router)();
 // User Login (generates access token + sets httpOnly refresh cookie)
 router.post('/users/login', (0, validate_1.validate)(userSchema_1.loginSchema), userController_1.default.login);
@@ -41,5 +42,7 @@ router.patch('/users/:id/assign-mentor', authMiddleware_1.verifyToken, firstLogi
 // Delete user (Admin only - Mentors are not permitted to delete mentees)
 router.delete('/users/delete/:id', authMiddleware_1.verifyToken, firstLoginCheckMiddleware_1.checkFirstLogin, (0, authMiddleware_1.authorize)('admin'), (0, validate_1.validate)(userSchema_1.getUserSchema), userController_1.default.deleteUser);
 router.patch("/users/update-password", authMiddleware_1.verifyToken, userController_2.updatePassword);
+// Get full hierarchy: Admin -> Mentors -> Mentees (Admin only)
+router.get('/users/hierarchy', authMiddleware_1.verifyToken, firstLoginCheckMiddleware_1.checkFirstLogin, (0, authMiddleware_1.authorize)('admin'), hierarchyController_1.getHierarchy);
 exports.default = router;
 //# sourceMappingURL=userRoute.js.map

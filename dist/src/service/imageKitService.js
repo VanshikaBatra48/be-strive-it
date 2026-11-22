@@ -5,10 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.imagekit = void 0;
 exports.uploadToImageKit = uploadToImageKit;
+exports.fetchAndDecryptFromImageKit = fetchAndDecryptFromImageKit;
 exports.deleteFromImageKit = deleteFromImageKit;
 exports.bulkDeleteFromImageKit = bulkDeleteFromImageKit;
 require("dotenv/config");
 const imagekit_1 = __importDefault(require("imagekit"));
+const cryptoService_1 = require("./cryptoService");
 // 1. Validate environment configuration
 const publicKey = process.env.IMAGEKIT_PUBLIC_KEY?.trim();
 const privateKey = process.env.IMAGEKIT_PRIVATE_KEY?.trim();
@@ -23,19 +25,21 @@ exports.imagekit = new imagekit_1.default({
     urlEndpoint: urlEndpoint || '',
 });
 /**
- * Upload a file buffer directly to ImageKit.
+ * Encrypts a file buffer and uploads the encrypted ciphertext directly to ImageKit.
  *
- * @param buffer - File content buffer (from multer memoryStorage)
+ * @param buffer - Plaintext file content buffer (from multer memoryStorage)
  * @param fileName - Original or sanitized file name
- * @param folder - Target folder path in ImageKit (e.g. '/chat', '/tasks')
+ * @param folder - Target folder path in ImageKit (e.g. '/chat', '/tasks', '/submissions')
  */
 async function uploadToImageKit(buffer, fileName, folder = '/chat') {
     try {
+        // App-level encryption: encrypt file buffer before uploading to cloud
+        const encryptedBuffer = (0, cryptoService_1.encryptBuffer)(buffer);
         const response = await exports.imagekit.upload({
-            file: buffer,
+            file: encryptedBuffer,
             fileName,
             folder,
-            useUniqueFileName: true, // Prevents overwriting files with the same name
+            useUniqueFileName: true,
         });
         return {
             fileId: response.fileId,
@@ -51,6 +55,35 @@ async function uploadToImageKit(buffer, fileName, folder = '/chat') {
     }
 }
 /**
+ * Downloads an encrypted file from ImageKit and decrypts it back to plaintext.
+ *
+ * @param url - Direct ImageKit CDN URL
+ * @returns Decrypted plaintext Buffer
+ */
+async function fetchAndDecryptFromImageKit(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch file from ImageKit: ${response.statusText}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const encryptedBuffer = Buffer.from(arrayBuffer);
+        try {
+            // Decrypt using AES-256-GCM
+            return (0, cryptoService_1.decryptBuffer)(encryptedBuffer);
+        }
+        catch (decryptErr) {
+            // Fallback: If decryption fails, the file might be an older legacy file uploaded before encryption was added
+            console.warn('Decryption failed, falling back to raw buffer (legacy file):', decryptErr);
+            return encryptedBuffer;
+        }
+    }
+    catch (error) {
+        console.error('Failed to fetch and decrypt file from ImageKit:', error);
+        throw new Error(error?.message || 'Failed to decrypt file from storage');
+    }
+}
+/**
  * Delete a single file from ImageKit by its fileId.
  *
  * @param fileId - ImageKit unique fileId
@@ -61,7 +94,6 @@ async function deleteFromImageKit(fileId) {
     }
     catch (error) {
         console.error(`Failed to delete file (${fileId}) from ImageKit:`, error);
-        // Don't throw if file was already deleted
     }
 }
 /**

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteTaskController = exports.evaluateTaskController = exports.submitTaskController = exports.updateTaskStatusController = exports.updateTaskController = exports.getTaskByIdController = exports.getAllTasksController = exports.createTaskController = void 0;
+exports.downloadTaskAttachmentController = exports.deleteTaskController = exports.evaluateTaskController = exports.submitTaskController = exports.updateTaskStatusController = exports.updateTaskController = exports.getTaskByIdController = exports.getAllTasksController = exports.createTaskController = void 0;
 const taskService_1 = require("../service/taskService");
 const imageKitService_1 = require("../service/imageKitService");
 function getActor(req) {
@@ -252,4 +252,34 @@ const deleteTaskController = async (req, res, next) => {
     }
 };
 exports.deleteTaskController = deleteTaskController;
+// DOWNLOAD & DECRYPT TASK ATTACHMENT
+const downloadTaskAttachmentController = async (req, res, next) => {
+    try {
+        const actor = getActor(req);
+        if (!actor) {
+            return res.status(401).json({ success: false, message: 'Authentication required' });
+        }
+        const taskId = Number(req.params.id);
+        const attachmentId = req.params.attachmentId;
+        const task = await (0, taskService_1.getTaskById)(taskId, actor);
+        const attachments = Array.isArray(task.attachments) ? task.attachments : [];
+        const att = attachments.find((a, index) => a.id === attachmentId || String(index) === attachmentId);
+        if (!att || !att.url) {
+            return res.status(404).json({ success: false, message: 'Attachment not found' });
+        }
+        const decryptedBuffer = await (0, imageKitService_1.fetchAndDecryptFromImageKit)(att.url);
+        const mimeType = att.type || 'application/octet-stream';
+        const inline = mimeType.startsWith('image/') || mimeType === 'application/pdf';
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Length', decryptedBuffer.length);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, no-cache');
+        res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(att.name || 'attachment')}`);
+        return res.send(decryptedBuffer);
+    }
+    catch (error) {
+        handleTaskError(error, res, next);
+    }
+};
+exports.downloadTaskAttachmentController = downloadTaskAttachmentController;
 //# sourceMappingURL=taskController.js.map

@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 
 import * as taskSubmissionService from '../service/taskSubmissionService';
-import { uploadToImageKit } from '../service/imageKitService';
-
+import { uploadToImageKit, fetchAndDecryptFromImageKit } from '../service/imageKitService';
 
 // -------------------------------------
 // SUBMIT TASK
@@ -349,6 +348,49 @@ export const getSubmissionById = async (
     return res.status(404).json({
       success: false,
       message: error.message || 'Submission not found'
+    });
+  }
+};
+
+// DOWNLOAD & DECRYPT SUBMISSION ATTACHMENT
+export const downloadSubmissionAttachment = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const submissionId = Number(req.params.submissionId);
+    const userId = Number(req.user?.id);
+    const role = String(req.user?.role);
+
+    if (!Number.isInteger(submissionId) || submissionId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid submission ID' });
+    }
+
+    const submission = await taskSubmissionService.getSubmissionById(submissionId, userId, role);
+
+    if (!submission) {
+      return res.status(404).json({ success: false, message: 'Submission not found' });
+    }
+
+    if (!submission.attachmentUrl) {
+      return res.status(404).json({ success: false, message: 'No attachment found for this submission' });
+    }
+
+    const decryptedBuffer = await fetchAndDecryptFromImageKit(submission.attachmentUrl);
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', decryptedBuffer.length);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="submission-${submissionId}-deliverable"`
+    );
+    return res.send(decryptedBuffer);
+  } catch (error: any) {
+    return res.status(403).json({
+      success: false,
+      message: error.message || 'Unable to download attachment'
     });
   }
 };

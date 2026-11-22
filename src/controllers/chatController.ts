@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import * as chat from '../service/chatService';
 import { ChatError } from '../service/chatService';
+import { fetchAndDecryptFromImageKit } from '../service/imageKitService';
 
 // ---------- Validation ----------
 const idSchema = z.coerce.number().int().positive();
@@ -154,13 +155,21 @@ const chatController = {
       actorOf(req),
       idSchema.parse(req.params.attachmentId)
     );
-
-    // If file is hosted on ImageKit, redirect directly to the CDN URL
+    // If file is hosted on ImageKit, fetch ciphertext, decrypt it, and stream to client
     if (url) {
-      res.redirect(url);
+      const decryptedBuffer = await fetchAndDecryptFromImageKit(url);
+      const inline = mimeType.startsWith('image/');
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', decryptedBuffer.length);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'private, no-cache');
+      res.setHeader(
+        'Content-Disposition',
+        `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(originalName)}`
+      );
+      res.send(decryptedBuffer);
       return;
     }
-
     // Fallback for legacy files stored on local server disk
     if (filePath) {
       const inline = mimeType.startsWith('image/');
@@ -178,7 +187,6 @@ const chatController = {
       });
       return;
     }
-
     res.status(404).json({ success: false, message: 'File not found' });
   }),
 };

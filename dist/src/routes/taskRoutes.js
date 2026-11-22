@@ -21,6 +21,7 @@ router.get('/time/active', (0, authMiddleware_1.authorize)('mentee'), timeLogCon
 router.get('/:id', (0, validate_1.validate)(taskSchema_1.taskIdParamSchema), taskController_1.getTaskByIdController);
 // Update a task (Admin & owning Mentor only)
 router.patch('/:id', (0, authMiddleware_1.authorize)('admin', 'mentor'), (0, validate_1.validate)(taskSchema_1.updateTaskSchema), taskController_1.updateTaskController);
+router.get('/:id/attachments/:attachmentId/download', taskController_1.downloadTaskAttachmentController);
 // Update task status (Assigned Mentee, Admin & owning Mentor)
 router.patch('/:id/status', (0, authMiddleware_1.authorize)('admin', 'mentor', 'mentee'), (0, validate_1.validate)(taskSchema_1.updateTaskStatusSchema), taskController_1.updateTaskStatusController);
 // Time tracking

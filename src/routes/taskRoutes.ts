@@ -22,6 +22,7 @@ import {
   submitTaskController,
   evaluateTaskController,
   deleteTaskController,
+  downloadTaskAttachmentController,
 } from '../controllers/taskController';
 
 import {
@@ -61,6 +62,8 @@ router.patch(
   validate(updateTaskSchema),
   updateTaskController
 );
+
+router.get('/:id/attachments/:attachmentId/download', downloadTaskAttachmentController);
 
 // Update task status (Assigned Mentee, Admin & owning Mentor)
 router.patch(

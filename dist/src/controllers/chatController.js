@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const zod_1 = require("zod");
 const chat = __importStar(require("../service/chatService"));
 const chatService_1 = require("../service/chatService");
+const imageKitService_1 = require("../service/imageKitService");
 // ---------- Validation ----------
 const idSchema = zod_1.z.coerce.number().int().positive();
 const renameGroupBody = zod_1.z.object({
@@ -148,9 +149,16 @@ const chatController = {
     /** Files are only reachable through this authenticated route. */
     downloadAttachment: wrap(async (req, res) => {
         const { filePath, url, mimeType, originalName } = await chat.getAttachmentFile(actorOf(req), idSchema.parse(req.params.attachmentId));
-        // If file is hosted on ImageKit, redirect directly to the CDN URL
+        // If file is hosted on ImageKit, fetch ciphertext, decrypt it, and stream to client
         if (url) {
-            res.redirect(url);
+            const decryptedBuffer = await (0, imageKitService_1.fetchAndDecryptFromImageKit)(url);
+            const inline = mimeType.startsWith('image/');
+            res.setHeader('Content-Type', mimeType);
+            res.setHeader('Content-Length', decryptedBuffer.length);
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'private, no-cache');
+            res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(originalName)}`);
+            res.send(decryptedBuffer);
             return;
         }
         // Fallback for legacy files stored on local server disk

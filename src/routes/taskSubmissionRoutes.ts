@@ -5,7 +5,8 @@ import {
   requestChanges,
   approveSubmission,
   getSubmissionHistory,
-  getSubmissionById
+  getSubmissionById,
+  downloadSubmissionAttachment,
 } from '../controllers/taskSubmissionController';
 
 import {
@@ -53,6 +54,12 @@ router.patch(
   authenticate,
   authorize('mentor'),
   approveSubmission
+);
+
+router.get(
+  '/submissions/:submissionId/attachment',
+  authenticate,
+  downloadSubmissionAttachment
 );
 
 export default router;

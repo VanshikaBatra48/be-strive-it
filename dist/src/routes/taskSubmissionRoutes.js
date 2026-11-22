@@ -15,5 +15,6 @@ router.get('/submissions/:submissionId', authMiddleware_1.authenticate, taskSubm
 router.patch('/submissions/:submissionId/request-changes', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)('mentor'), taskSubmissionController_1.requestChanges);
 // Mentor approves a submission.
 router.patch('/submissions/:submissionId/approve', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)('mentor'), taskSubmissionController_1.approveSubmission);
+router.get('/submissions/:submissionId/attachment', authMiddleware_1.authenticate, taskSubmissionController_1.downloadSubmissionAttachment);
 exports.default = router;
 //# sourceMappingURL=taskSubmissionRoutes.js.map

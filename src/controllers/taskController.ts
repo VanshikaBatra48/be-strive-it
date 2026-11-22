@@ -1,6 +1,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 
+
 import {
   ServiceError,
   createTask,
@@ -14,8 +15,7 @@ import {
 } from '../service/taskService';
 import type { TaskActor, TaskQueryFilters, UpdateTaskInput } from '../service/taskService';
 import type { TaskCategory, TaskPriority, TaskStatus, TaskAttachment } from '../models/tasks';
-import { uploadToImageKit } from '../service/imageKitService';
-
+import { uploadToImageKit, fetchAndDecryptFromImageKit } from '../service/imageKitService';
 function getActor(req: Request): TaskActor | null {
   if (!req.user) return null;
   return {
@@ -345,6 +345,47 @@ export const deleteTaskController = async (
       success: true,
       message: 'Task deleted successfully',
     });
+  } catch (error) {
+    handleTaskError(error, res, next);
+  }
+};
+
+// DOWNLOAD & DECRYPT TASK ATTACHMENT
+export const downloadTaskAttachmentController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const actor = getActor(req);
+    if (!actor) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const taskId = Number(req.params.id);
+    const attachmentId = req.params.attachmentId;
+
+    const task = await getTaskById(taskId, actor);
+    const attachments: TaskAttachment[] = Array.isArray(task.attachments) ? task.attachments : [];
+    const att = attachments.find((a, index) => a.id === attachmentId || String(index) === attachmentId);
+
+    if (!att || !att.url) {
+      return res.status(404).json({ success: false, message: 'Attachment not found' });
+    }
+
+    const decryptedBuffer = await fetchAndDecryptFromImageKit(att.url);
+    const mimeType = att.type || 'application/octet-stream';
+    const inline = mimeType.startsWith('image/') || mimeType === 'application/pdf';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', decryptedBuffer.length);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader(
+      'Content-Disposition',
+      `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(att.name || 'attachment')}`
+    );
+    return res.send(decryptedBuffer);
   } catch (error) {
     handleTaskError(error, res, next);
   }
