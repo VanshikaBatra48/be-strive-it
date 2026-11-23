@@ -66,6 +66,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+let isDbConnected = false;
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  if (!isDbConnected) {
+    try {
+      await connectDB();
+      isDbConnected = true;
+    } catch (error) {
+      console.error('Database connection failed:', error);
+    }
+  }
+  next();
+});
+
 // Register routes
 // Register routes (notifications first, so '/api' mounts can't intercept it)
 app.use('/api/notifications', authenticate, notificationRoutes);
@@ -166,4 +179,8 @@ async function startServer(): Promise<Server | undefined> {
   }
 }
 
-void startServer();
+if (!process.env.VERCEL) {
+  void startServer();
+}
+
+export default app;

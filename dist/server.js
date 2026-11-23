@@ -54,6 +54,19 @@ app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((0, cookie_parser_1.default)());
+let isDbConnected = false;
+app.use(async (_req, _res, next) => {
+    if (!isDbConnected) {
+        try {
+            await (0, database_1.connectDB)();
+            isDbConnected = true;
+        }
+        catch (error) {
+            console.error('Database connection failed:', error);
+        }
+    }
+    next();
+});
 // Register routes
 // Register routes (notifications first, so '/api' mounts can't intercept it)
 app.use('/api/notifications', authMiddleware_1.authenticate, notificationRoutes_1.default);
@@ -134,5 +147,8 @@ async function startServer() {
         return undefined;
     }
 }
-void startServer();
+if (!process.env.VERCEL) {
+    void startServer();
+}
+exports.default = app;
 //# sourceMappingURL=server.js.map

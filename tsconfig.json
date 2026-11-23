@@ -43,6 +43,7 @@
   },
   "include": [
     "server.ts",
+    "api/**/*.ts",
     "src/**/*.ts",
     "src/**/*.d.ts"
   ],
