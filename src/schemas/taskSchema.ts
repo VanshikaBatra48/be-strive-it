@@ -70,7 +70,7 @@ const taskFields = {
 };
 
 const dueAfterStart = {
-  message: 'due_date must be on or after start_date',
+  message: 'Start date must be less than due date',
   path: ['due_date'],
 };
 
@@ -84,7 +84,19 @@ export const createTaskSchema = z.object({
       priority: taskFields.priority.default('medium'),
       estimated_hours: estimatedHoursOnCreate,
     })
-    .refine((t) => t.due_date >= t.start_date, dueAfterStart),
+    .refine((t) => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      return t.start_date >= todayStart;
+    }, {
+      message: 'Start date cannot be in the past',
+      path: ['start_date'],
+    })
+    .refine((t) => t.due_date.getTime() >= Date.now() - 60000, {
+      message: 'Due date cannot be in the past',
+      path: ['due_date'],
+    })
+    .refine((t) => t.start_date < t.due_date, dueAfterStart),
 });
 
 // PATCH /api/tasks/:id (every field optional, at least one required)
@@ -105,7 +117,7 @@ export const updateTaskSchema = z.object({
     .refine((t) => Object.keys(t).length > 0, {
       message: 'Provide at least one field to update',
     })
-    .refine((t) => !t.start_date || !t.due_date || t.due_date >= t.start_date, dueAfterStart),
+    .refine((t) => !t.start_date || !t.due_date || t.start_date < t.due_date, dueAfterStart),
 });
 
 // PATCH /api/tasks/:id/submit

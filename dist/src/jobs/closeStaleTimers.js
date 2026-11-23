@@ -8,7 +8,7 @@ const node_cron_1 = __importDefault(require("node-cron"));
 const timeLogService_1 = require("../service/timeLogService");
 function startStaleTimerJob() {
     // Check every minute so an 8-hour session is closed promptly when it reaches 8 hours
-    node_cron_1.default.schedule('* * * * *', async () => {
+    node_cron_1.default.schedule('0 * * * *', async () => {
         try {
             await (0, timeLogService_1.closeStaleLogs)();
         }

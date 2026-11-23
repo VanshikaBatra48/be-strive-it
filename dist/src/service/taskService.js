@@ -82,8 +82,16 @@ function validateTaskDates(startDate, dueDate) {
     if (Number.isNaN(s.getTime()) || Number.isNaN(d.getTime())) {
         throw new ServiceError(400, 'Valid start_date and due_date are required');
     }
-    if (s > d) {
-        throw new ServiceError(400, 'due_date must be on or after start_date');
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    if (s < todayStart) {
+        throw new ServiceError(400, 'Start date cannot be in the past');
+    }
+    if (d.getTime() < Date.now() - 60000) {
+        throw new ServiceError(400, 'Due date cannot be in the past');
+    }
+    if (s >= d) {
+        throw new ServiceError(400, 'Start date must be less than due date');
     }
 }
 /** Fetch a single task hydrated with user associations. */
