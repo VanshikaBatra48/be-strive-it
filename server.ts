@@ -46,7 +46,7 @@ const envOrigins = (process.env.CORS_ORIGINS || '')
   .filter(Boolean);
 
 const allowedOrigins: string[] = Array.from(
-  new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.31.242:5173', 'http://192.168.1.32:5173', 'https://fe-strive-it.onrender.com', ...envOrigins])
+  new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.31.242:5173', 'http://192.168.1.32:5173', 'https://fe-strive-it.onrender.com','https://fe-strive-it-2.vercel.app/', ...envOrigins])
 );
 
 const corsOptions: CorsOptions = {
